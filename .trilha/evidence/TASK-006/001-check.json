@@ -1,0 +1,13 @@
+{
+  "task": "TASK-006",
+  "seq": 1,
+  "kind": "check",
+  "at": "2026-09-12T23:12:51Z",
+  "by": "trilha-spec verify (session 001)",
+  "command": "go test ./mcp/...",
+  "dir": ".",
+  "exit_code": 0,
+  "output": "ok  \tgithub.com/emersonjoe/trilha-spec/mcp\t(cached)\n",
+  "output_sha256": "8c3a7180d9b195d93dadb66c138acede0067adb79825aa5b3e1a168d37d7b3b0",
+  "passed": true
+}

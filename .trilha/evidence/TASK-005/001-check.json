@@ -1,0 +1,13 @@
+{
+  "task": "TASK-005",
+  "seq": 1,
+  "kind": "check",
+  "at": "2026-09-12T23:12:51Z",
+  "by": "trilha-spec verify (session 001)",
+  "command": "go test ./task/...",
+  "dir": ".",
+  "exit_code": 0,
+  "output": "ok  \tgithub.com/emersonjoe/trilha-spec/task\t(cached)\n",
+  "output_sha256": "48d1f8e3a40b3b772ce28f3f326661ea3d6ba949582da7283df44b6df10a230d",
+  "passed": true
+}

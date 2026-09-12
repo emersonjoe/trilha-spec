@@ -1,0 +1,172 @@
+package mcp
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	"github.com/emersonjoe/trilha-spec/ai"
+	"github.com/emersonjoe/trilha-spec/spec"
+	"github.com/emersonjoe/trilha-spec/task"
+)
+
+// Tools answers the protocol's tool set over one layout. Reading is always
+// offered; the tools that change state — a transition, an evidence record —
+// only when write is true, and a tool not offered cannot be called.
+func Tools(l spec.Layout, write bool) []*Tool {
+	st := &task.Store{Layout: l}
+	tools := []*Tool{
+		{
+			Name:        "trilha_list_tasks",
+			Description: "List every task with id, title, status and dependencies. Filter by status with {\"status\": \"ready\"}.",
+			Schema:      json.RawMessage(`{"type":"object","properties":{"status":{"type":"string"}}}`),
+			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+				var in struct{ Status string }
+				json.Unmarshal(args, &in)
+				tasks, err := st.List()
+				if err != nil {
+					return "", err
+				}
+				var out []map[string]any
+				for _, t := range tasks {
+					if in.Status != "" && string(t.Status) != in.Status {
+						continue
+					}
+					out = append(out, map[string]any{"id": t.ID, "title": t.Title, "status": t.Status, "depends_on": t.DependsOn, "agent": t.Agent})
+				}
+				return js(out), nil
+			},
+		},
+		{
+			Name:        "trilha_get_task",
+			Description: "Read one task in full: acceptance criteria, checks, body and evidence.",
+			Schema:      json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"}},"required":["id"]}`),
+			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+				var in struct{ ID string }
+				json.Unmarshal(args, &in)
+				t, err := st.Get(in.ID)
+				if err != nil {
+					return "", err
+				}
+				ev, err := task.ListEvidence(l, in.ID)
+				if err != nil {
+					return "", err
+				}
+				return js(map[string]any{"task": t, "evidence": ev}), nil
+			},
+		},
+		{
+			Name:        "trilha_next",
+			Description: "Answer the tasks that can be picked up now: status ready with every dependency done, in dependency order.",
+			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+				g, err := st.Graph()
+				if err != nil {
+					return "", err
+				}
+				return js(g.Ready()), nil
+			},
+		},
+		{
+			Name:        "trilha_context",
+			Description: "Build the context pack of a task — project, constitution, spec, task, dependencies, evidence, agent — as Markdown (default) or JSON.",
+			Schema:      json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"},"format":{"type":"string","enum":["markdown","json"]}},"required":["id"]}`),
+			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+				var in struct{ ID, Format string }
+				json.Unmarshal(args, &in)
+				p, err := ai.Build(l, in.ID)
+				if err != nil {
+					return "", err
+				}
+				if in.Format == "json" {
+					return string(p.JSON()), nil
+				}
+				return p.Markdown(), nil
+			},
+		},
+		{
+			Name:        "trilha_graph",
+			Description: "The dependency graph as Mermaid.",
+			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+				g, err := st.Graph()
+				if err != nil {
+					return "", err
+				}
+				return g.Mermaid(), nil
+			},
+		},
+	}
+	if !write {
+		return tools
+	}
+	return append(tools,
+		&Tool{
+			Name:        "trilha_move",
+			Description: "Move a task to a status (idea, spec, ready, running, verify, review, done, blocked, failed). Only legal transitions are accepted, and running needs every dependency done.",
+			Schema:      json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"},"status":{"type":"string"}},"required":["id","status"]}`),
+			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+				var in struct{ ID, Status string }
+				json.Unmarshal(args, &in)
+				t, err := st.Move(in.ID, task.Status(in.Status))
+				if err != nil {
+					return "", err
+				}
+				return fmt.Sprintf("%s is now %s", t.ID, t.Status), nil
+			},
+		},
+		&Tool{
+			Name:        "trilha_evidence",
+			Description: "Record evidence on a task: a note, or an artifact with the files it produced.",
+			Schema:      json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"},"kind":{"type":"string","enum":["note","artifact"]},"note":{"type":"string"},"files":{"type":"array","items":{"type":"string"}},"by":{"type":"string"}},"required":["id","kind"]}`),
+			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+				var in struct {
+					ID, Kind, Note, By string
+					Files              []string
+				}
+				json.Unmarshal(args, &in)
+				if in.By == "" {
+					in.By = "mcp"
+				}
+				if in.Kind != "note" && in.Kind != "artifact" {
+					return "", fmt.Errorf("kind must be note or artifact")
+				}
+				e, p, err := task.Record(l, task.Evidence{Task: in.ID, Kind: in.Kind, Note: in.Note, Files: in.Files, By: in.By, Passed: true})
+				if err != nil {
+					return "", err
+				}
+				return fmt.Sprintf("recorded #%d at %s", e.Seq, p), nil
+			},
+		},
+		&Tool{
+			Name:        "trilha_verify",
+			Description: "Run the checks of a task in the project root, record each as evidence and answer whether all passed. Does not move the task.",
+			Schema:      json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"},"by":{"type":"string"}},"required":["id"]}`),
+			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+				var in struct{ ID, By string }
+				json.Unmarshal(args, &in)
+				t, err := st.Get(in.ID)
+				if err != nil {
+					return "", err
+				}
+				if in.By == "" {
+					in.By = "mcp"
+				}
+				v, err := task.RunChecks(ctx, l, t, l.Root, in.By)
+				if err != nil {
+					return "", err
+				}
+				var b strings.Builder
+				fmt.Fprintf(&b, "passed: %v\n", v.Passed)
+				for _, e := range v.Evidence {
+					fmt.Fprintf(&b, "#%d %s exit %d\n", e.Seq, e.Command, e.ExitCode)
+				}
+				return b.String(), nil
+			},
+		},
+	)
+}
+
+func js(v any) string {
+	b, _ := json.MarshalIndent(v, "", "  ")
+	return string(b)
+}
