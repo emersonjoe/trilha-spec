@@ -1,6 +1,8 @@
 # trilha-spec
 
 > [🇺🇸 English](README.md) · 🇧🇷 Português
+>
+> **Capítulo hands-on no site do Trilha:** <https://emersonjoe.github.io/trilha/pt/aprender/agentico-protocolo>
 
 **Um padrão aberto para descrever trabalho executável por agentes de software.**
 

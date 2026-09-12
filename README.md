@@ -1,6 +1,8 @@
 # trilha-spec
 
 > 🇺🇸 English · [🇧🇷 Português](README.pt-BR.md)
+>
+> **Hands-on chapter on the Trilha site:** <https://emersonjoe.github.io/trilha/learn/agentic-protocol>
 
 **An open protocol for describing work that software agents can execute.**
 

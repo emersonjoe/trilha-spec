@@ -25,3 +25,7 @@ shell commands, and other important information, read the current plan
 - Status transitions are the ones in `task.Transitions`; a new one is a spec, not a patch.
 - Public text (README, docs, CLI) in English with pt-BR in the same commit; specs and ADRs in pt-BR.
 - One spec per session; short spec (`.specify/templates/spec-curta-template.md`) for small changes.
+- **The hands-on chapter follows the code.** The Trilha site teaches this tool in
+  `https://emersonjoe.github.io/trilha/learn/agentic-protocol` (pt: `/pt/aprender/agentico-protocolo`). A change that alters what a user types or
+  sees — a command, a flag, a file format, an output — updates that chapter in the same session:
+  `site/internal/docs/content/en/learn/agentic-protocol.md` and `site/internal/docs/content/pt/aprender/agentico-protocolo.md` in the `emersonjoe/trilha` repository, both locales, before the spec closes.

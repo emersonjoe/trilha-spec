@@ -44,6 +44,11 @@ Toda mudança começa por uma spec em `specs/NNN-nome/` (spec-kit) e, quando mud
 por uma task em `.trilha/tasks/` do próprio repositório — o projeto usa o que publica.
 Mudança pequena usa a spec curta. Commits pequenos por tarefa; `gofmt` e `go vet` limpos.
 
+**O capítulo hands-on acompanha o código.** O site do Trilha ensina esta ferramenta em
+`/learn/agentic-protocol` (pt: `/pt/aprender/agentico-protocolo`). Toda mudança no que o usuário digita ou vê — comando, flag, formato de
+arquivo, saída — atualiza o capítulo nas duas locales (`site/internal/docs/content/en/learn/agentic-protocol.md` e `site/internal/docs/content/pt/aprender/agentico-protocolo.md` no repositório
+`emersonjoe/trilha`) na mesma sessão, antes de a spec fechar; a tarefa entra na lista da spec.
+
 ## Governance
 
 Esta constituição prevalece sobre qualquer outra prática do repositório. Emendas exigem nova
