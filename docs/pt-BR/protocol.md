@@ -1,4 +1,4 @@
-# O protocolo Trilha, versão 0.1
+# O protocolo Trilha, versão 0.2
 
 > [🇺🇸 English](../protocol.md) · 🇧🇷 Português
 
@@ -184,8 +184,11 @@ Ferramentas de escrita só aparecem com `--write`; ferramenta não listada não 
 
 ## 9. Versionamento
 
-Esta página é a versão 0.1. Mudança de campo, transição ou nome de arquivo sobe a versão e é
-registrada em uma spec em `specs/`. Leitores devem tolerar campos e tipos de evidência
+Esta página é a versão 0.2. Mudança de campo, transição ou nome de arquivo sobe a versão e é
+registrada em uma spec em `specs/`. A 0.2 (specs 003–008) acrescentou `rejected`/`superseded`
+e relações entre specs, impacto de segurança na spec, limites e pausa do projeto, campos de
+custo na evidência `run` e evidência assinada; toda adição é campo novo opcional, então um
+leitor 0.1 ainda lê um diretório 0.2. Leitores devem tolerar campos e tipos de evidência
 desconhecidos.
 
 ## 10. Contrato de execução

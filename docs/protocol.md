@@ -1,4 +1,4 @@
-# The Trilha protocol, version 0.1
+# The Trilha protocol, version 0.2
 
 > 🇺🇸 English · [🇧🇷 Português](pt-BR/protocol.md)
 
@@ -182,8 +182,11 @@ Write tools are only listed with `--write`; a tool not listed cannot be called.
 
 ## 9. Versioning
 
-This page is version 0.1. A change to a field, a transition or a file name bumps it and is
-recorded in a spec under `specs/`. Readers should tolerate unknown fields and unknown evidence
+This page is version 0.2. A change to a field, a transition or a file name bumps it and is
+recorded in a spec under `specs/`. 0.2 (specs 003–008) added spec `rejected`/`superseded` and
+relations, security impact on a spec, project limits and pause, cost fields on `run`
+evidence, and signed evidence; every addition is a new optional field, so a 0.1 reader still
+reads a 0.2 directory. Readers should tolerate unknown fields and unknown evidence
 kinds.
 
 ## 10. Execution contract

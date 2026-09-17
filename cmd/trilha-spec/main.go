@@ -27,7 +27,7 @@ import (
 	"github.com/emersonjoe/trilha-spec/task"
 )
 
-const version = "0.1.0"
+const version = "0.2.0"
 
 const usage = `trilha-spec ` + version + ` — the open protocol for work agents can execute
 
