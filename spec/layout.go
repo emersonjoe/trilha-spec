@@ -183,6 +183,8 @@ func (p Problem) String() string {
 		return "spec reference does not exist: " + p.Arg
 	case ProblemSpecNoSuccessor:
 		return "spec " + p.Arg + " is superseded but no spec names it in `supersedes`"
+	case ProblemSpecNoSecurity:
+		return "spec " + p.Arg + " is approved but declares no security impact (assets, trust_boundaries, controls, evidence)"
 	}
 	return p.Code + " " + p.Arg
 }

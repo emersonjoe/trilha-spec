@@ -174,6 +174,15 @@ multiple Attempts. Repair lineage uses `retry_of` with a Run ID, never a Task ID
 | `issue` | no | the issue that is the source of the scope |
 | `supersedes` | no | spec IDs this one replaces; every one must exist |
 | `depends_on` | no | spec IDs this one builds on; every one must exist |
+| `assets` | no | what the change touches, for the security reviewer: free identifiers |
+| `trust_boundaries` | no | the boundaries it crosses (`browser → api`) |
+| `controls` | no | the controls it affects (`ASVS V4.1`); free identifiers |
+| `evidence` | no | commands a reviewer must see run: program and arguments, no shell, as task `checks` (§3) |
+
+The four security fields are the **security impact** of the spec. The protocol carries them and
+judges nothing about them: whether the controls are sufficient is the reviewer's call. The
+context pack (§6) hands them to the agent next to the task's acceptance and checks; an
+`approved` spec that declares none of them is a `doctor` warning, not a fault.
 
 The body is the specification: why, what changes, out of scope, acceptance. A `draft` is being
 written; `approved` is agreed and tasks may be cut from it; `done` has every task delivered;

@@ -246,6 +246,48 @@ func TestSpecLifecycleCLI(t *testing.T) {
 	}
 }
 
+func TestSpecSecurityCLI(t *testing.T) {
+	dir := t.TempDir()
+	must(t, dir, "init", "--name", "demo")
+	must(t, dir, "spec", "new", "Login", "--asset", "session cookie", "--control", "ASVS V4.1",
+		"--evidence", "go test ./internal/auth/...", "--evidence", `sh -c "curl -sf localhost:3000/login | grep -q Sign"`)
+	out := must(t, dir, "spec", "show", "001-login")
+	for _, want := range []string{"assets:\n  - session cookie\n", "controls:\n  - ASVS V4.1\n", "evidence:\n  - go test ./internal/auth/...\n  - \"sh -c \\\"curl -sf localhost:3000/login | grep -q Sign\\\"\"\n"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("show lacks %q:\n%s", want, out)
+		}
+	}
+	// set replaces the list it is given and keeps the others.
+	must(t, dir, "spec", "set", "001-login", "--boundary", "browser → api", "--control", "ASVS V3.4")
+	out = must(t, dir, "spec", "show", "001-login", "--json")
+	for _, want := range []string{`"assets": [`, `"trust_boundaries": [`, `"ASVS V3.4"`, `"evidence": [`} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("json lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "ASVS V4.1") {
+		t.Fatalf("--control did not replace:\n%s", out)
+	}
+	// The pack hands the impact to the agent next to acceptance and checks.
+	must(t, dir, "task", "add", "Form", "--spec", "001-login", "--status", "ready", "--accept", "ok")
+	if out := must(t, dir, "context", "TASK-001"); !strings.Contains(out, "### Trust boundaries\n\n- browser → api") || !strings.Contains(out, "### Evidence the reviewer must see\n\n- `go test ./internal/auth/...`") {
+		t.Fatalf("context:\n%s", out)
+	}
+	// An approved spec without any of it is a doctor warning, not a failure.
+	must(t, dir, "spec", "new", "Bare")
+	must(t, dir, "spec", "move", "002-bare", "approved")
+	if out := must(t, dir, "doctor"); !strings.Contains(out, "! spec 002-bare is approved but declares no security impact") || !strings.Contains(out, "1 warning(s)") || !strings.Contains(out, "is healthy") {
+		t.Fatalf("doctor:\n%s", out)
+	}
+	if out, err := cliEnv(t, dir, []string{"TRILHA_LANG=pt"}, "doctor"); err != nil || !strings.Contains(out, "não declara impacto de segurança") {
+		t.Fatalf("doctor pt: %v\n%s", err, out)
+	}
+	must(t, dir, "spec", "set", "002-bare", "--evidence", "go vet ./...")
+	if out := must(t, dir, "doctor"); strings.Contains(out, "warning") {
+		t.Fatalf("doctor still warns:\n%s", out)
+	}
+}
+
 func TestUsage(t *testing.T) {
 	if out, err := cli(t, t.TempDir()); err == nil || !strings.Contains(out, "usage:") {
 		t.Fatalf("no args:\n%s", out)

@@ -32,8 +32,9 @@ const usage = `trilha-spec ` + version + ` — the open protocol for work agents
 usage: trilha-spec <command> [flags]
 
   init [dir]                    create .trilha/ (project, constitution, agents)
-  spec new <title> [--issue N] [--body TEXT | --body-file PATH]
-  spec list [--status S] | show <id> | move <id> <status> | set <id> [--issue N] [--supersedes A,B] [--depends A,B]
+  spec new <title> [--issue N] [--body TEXT | --body-file PATH] [--asset A]... [--boundary B]... [--control C]... [--evidence CMD]...
+  spec list [--status S] | show <id> | move <id> <status>
+  spec set <id> [--issue N] [--supersedes A,B] [--depends A,B] [--asset A]... [--boundary B]... [--control C]... [--evidence CMD]...
   task add <title> [--spec ID] [--depends A,B] [--agent N] [--status S] [--accept C]... [--check CMD]...
            [--body TEXT | --body-file PATH]   (PATH "-" reads stdin)
   task list [--status S] | show <id> | next | move <id> <status> | graph [--dot]
@@ -159,6 +160,7 @@ func cmdSpec(args []string, out io.Writer) error {
 		fs := flags("spec new")
 		issue := fs.String("issue", "", "issue URL or number")
 		body := bodyFlags(fs)
+		sec := securityFlags(fs)
 		pos, err := parse(fs, args[1:])
 		if err != nil {
 			return err
@@ -177,6 +179,7 @@ func cmdSpec(args []string, out io.Writer) error {
 		}
 		s := spec.NewSpecDoc(id, title, lang, text)
 		s.Issue = *issue
+		sec.apply(s)
 		if err := l.SaveSpec(s); err != nil {
 			return err
 		}
@@ -224,12 +227,13 @@ func cmdSpec(args []string, out io.Writer) error {
 		issue := fs.String("issue", "", "issue URL or number; \"\" keeps, \"-\" clears")
 		supersedes := fs.String("supersedes", "", "comma-separated spec ids this one replaces")
 		deps := fs.String("depends", "", "comma-separated spec ids this one builds on")
+		sec := securityFlags(fs)
 		pos, err := parse(fs, args[1:])
 		if err != nil {
 			return err
 		}
 		if len(pos) != 1 {
-			return errors.New(T("usage: trilha-spec spec set <id> [--issue N] [--supersedes A,B] [--depends A,B]"))
+			return errors.New(T("usage: trilha-spec spec set <id> [--issue N] [--supersedes A,B] [--depends A,B] [--asset A]... [--boundary B]... [--control C]... [--evidence CMD]..."))
 		}
 		s, err := l.LoadSpec(pos[0])
 		if err != nil {
@@ -248,6 +252,7 @@ func cmdSpec(args []string, out io.Writer) error {
 		if *deps != "" {
 			s.DependsOn = splitList(*deps)
 		}
+		sec.apply(s)
 		if err := s.Validate(); err != nil {
 			return err
 		}
@@ -655,7 +660,7 @@ func cmdDoctor(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	var problems []string
+	var problems, warns []string
 	for _, p := range st.Layout.Doctor() {
 		problems = append(problems, doctorMessage(p))
 	}
@@ -668,11 +673,22 @@ func cmdDoctor(args []string, out io.Writer) error {
 		problems = append(problems, err.Error())
 	} else {
 		for _, p := range st.Layout.CheckSpecs(specs) {
-			problems = append(problems, doctorMessage(p))
+			if p.Warning() {
+				warns = append(warns, doctorMessage(p))
+			} else {
+				problems = append(problems, doctorMessage(p))
+			}
 		}
 	}
 	if _, err := agent.List(st.Layout); err != nil {
 		problems = append(problems, err.Error())
+	}
+	// A warning is advice: it is printed, counted, and never fails doctor.
+	for _, w := range warns {
+		fmt.Fprintln(out, "!", w)
+	}
+	if len(warns) > 0 {
+		fmt.Fprintf(out, T("%d warning(s)\n"), len(warns))
 	}
 	if len(problems) == 0 {
 		fmt.Fprintf(out, T("✓ %s is healthy\n"), st.Layout.Dir())

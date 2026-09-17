@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/emersonjoe/trilha-spec/spec"
 )
 
 func relPath(root, p string) (string, error) {
@@ -55,4 +57,35 @@ func (b body) read() (string, error) {
 	}
 	raw, err := os.ReadFile(*b.file)
 	return string(raw), err
+}
+
+// security collects the security-impact flags `spec new` and `spec set`
+// share. Each is repeatable; on `set`, a flag that was given replaces the
+// whole list, one that was not leaves it alone.
+type security struct {
+	assets, boundaries, controls, evidence multi
+}
+
+func securityFlags(fs *flag.FlagSet) *security {
+	var s security
+	fs.Var(&s.assets, "asset", "asset the change touches (repeatable)")
+	fs.Var(&s.boundaries, "boundary", "trust boundary the change crosses (repeatable)")
+	fs.Var(&s.controls, "control", "affected control, e.g. \"ASVS V4.1\" (repeatable)")
+	fs.Var(&s.evidence, "evidence", "command a reviewer must see run, no shell (repeatable)")
+	return &s
+}
+
+func (s *security) apply(sp *spec.Spec) {
+	if len(s.assets) > 0 {
+		sp.Assets = s.assets
+	}
+	if len(s.boundaries) > 0 {
+		sp.TrustBoundaries = s.boundaries
+	}
+	if len(s.controls) > 0 {
+		sp.Controls = s.controls
+	}
+	if len(s.evidence) > 0 {
+		sp.Evidence = s.evidence
+	}
 }

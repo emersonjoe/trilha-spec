@@ -291,3 +291,53 @@ func TestSpecRelationsRoundTripAndCheck(t *testing.T) {
 		t.Fatalf("move not saved: %s", s.Status)
 	}
 }
+
+func TestSpecSecurityImpact(t *testing.T) {
+	l, _, err := Init(t.TempDir(), InitOptions{Name: "demo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewSpecDoc("001-auth", "Auth", "en", "")
+	s.Status = Approved
+	if s.HasSecurityImpact() {
+		t.Fatal("empty spec has security impact")
+	}
+	// Approved with nothing to review: a warning, not a fault.
+	problems := l.CheckSpecs([]*Spec{s})
+	if len(problems) != 1 || problems[0].Code != ProblemSpecNoSecurity || !problems[0].Warning() || problems[0].Arg != "001-auth" {
+		t.Fatalf("problems: %+v", problems)
+	}
+	if p := (Problem{ProblemSpecRefMissing, "x"}); p.Warning() {
+		t.Fatal("a missing reference is not a warning")
+	}
+	s.Assets = []string{"session cookie", "users table"}
+	s.TrustBoundaries = []string{"browser → api"}
+	s.Controls = []string{"ASVS V4.1", "ASVS V3.4"}
+	s.Evidence = []string{"go test ./internal/auth/...", `sh -c "curl -sf localhost:3000/login | grep -q Sign"`}
+	if len(l.CheckSpecs([]*Spec{s})) != 0 {
+		t.Fatal("declared impact still warned")
+	}
+	if err := l.SaveSpec(s); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(l.SpecFile("001-auth"))
+	for _, want := range []string{"assets:\n  - session cookie\n  - users table\n", "trust_boundaries:\n  - browser → api\n", "controls:\n  - ASVS V4.1\n", "evidence:\n  - go test ./internal/auth/...\n"} {
+		if !strings.Contains(string(b), want) {
+			t.Fatalf("written lacks %q:\n%s", want, b)
+		}
+	}
+	got, err := l.LoadSpec("001-auth")
+	if err != nil || len(got.Evidence) != 2 || got.Evidence[1] != `sh -c "curl -sf localhost:3000/login | grep -q Sign"` || got.TrustBoundaries[0] != "browser → api" {
+		t.Fatalf("round trip: %v %+v", err, got)
+	}
+	// Dropping a list drops the key: a spec without evidence does not carry `evidence:`.
+	got.Evidence = nil
+	l.SaveSpec(got)
+	if b, _ := os.ReadFile(l.SpecFile("001-auth")); strings.Contains(string(b), "evidence:") {
+		t.Fatalf("empty list written:\n%s", b)
+	}
+	bad := &Spec{ID: "002-b", Title: "B", Status: Draft, Controls: []string{" "}}
+	if err := bad.Validate(); err == nil || !strings.Contains(err.Error(), "controls has an empty item") {
+		t.Fatalf("empty item accepted: %v", err)
+	}
+}

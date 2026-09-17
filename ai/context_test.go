@@ -17,7 +17,11 @@ func TestBuild(t *testing.T) {
 		t.Fatal(err)
 	}
 	st := &task.Store{Layout: l}
-	if err := l.SaveSpec(spec.NewSpecDoc("001-oauth", "OAuth", "en", "")); err != nil {
+	sp := spec.NewSpecDoc("001-oauth", "OAuth", "en", "")
+	sp.Assets = []string{"session cookie"}
+	sp.Controls = []string{"ASVS V4.1"}
+	sp.Evidence = []string{"go test ./internal/auth/..."}
+	if err := l.SaveSpec(sp); err != nil {
 		t.Fatal(err)
 	}
 	dep, _ := st.Create("Base", func(x *task.Task) { x.Acceptance = []string{"x"} })
@@ -38,7 +42,7 @@ func TestBuild(t *testing.T) {
 		t.Fatalf("pack = %+v", p)
 	}
 	md := p.Markdown()
-	for _, want := range []string{"# Task TASK-002 — Login", "## Constitution", "## You are `coder`", "## Specification 001-oauth", "- OAuth login works", "- `go test ./...`", "TASK-001 — Base (idea)", "#1 note by me: started", "## Context: arch.md", "monolith"} {
+	for _, want := range []string{"# Task TASK-002 — Login", "## Constitution", "## You are `coder`", "## Specification 001-oauth", "### Assets touched\n\n- session cookie", "### Controls affected\n\n- ASVS V4.1", "### Evidence the reviewer must see\n\n- `go test ./internal/auth/...`", "- OAuth login works", "- `go test ./...`", "TASK-001 — Base (idea)", "#1 note by me: started", "## Context: arch.md", "monolith"} {
 		if !strings.Contains(md, want) {
 			t.Fatalf("markdown lacks %q:\n%s", want, md)
 		}
@@ -46,6 +50,9 @@ func TestBuild(t *testing.T) {
 	var out map[string]any
 	if err := json.Unmarshal(p.JSON(), &out); err != nil || out["task"].(map[string]any)["id"] != "TASK-002" {
 		t.Fatalf("json: %v", err)
+	}
+	if got := out["spec"].(map[string]any)["controls"].([]any); len(got) != 1 || got[0] != "ASVS V4.1" {
+		t.Fatalf("json spec controls: %v", got)
 	}
 	if _, err := Build(l, "TASK-999"); err == nil {
 		t.Fatal("missing task accepted")

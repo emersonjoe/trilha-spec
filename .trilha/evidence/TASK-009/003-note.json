@@ -1,0 +1,10 @@
+{
+  "task": "TASK-009",
+  "seq": 3,
+  "kind": "note",
+  "at": "2026-09-17T21:47:20Z",
+  "by": "claude-opus-5",
+  "exit_code": 0,
+  "passed": true,
+  "note": "assets/trust_boundaries/controls/evidence on a spec; doctor warns an approved spec without them; context pack and spec show --json expose them; protocol §11, README and chapter in both locales"
+}

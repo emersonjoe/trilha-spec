@@ -69,8 +69,24 @@ type Spec struct {
 	Supersedes []string `json:"supersedes,omitempty"`
 	// DependsOn names the specs this one builds on.
 	DependsOn []string `json:"depends_on,omitempty"`
-	Body      string   `json:"body,omitempty"`
-	Fields    Fields   `json:"-"`
+	// Security impact, for the reviewer: what the change touches and which
+	// controls it affects. Free identifiers ("session cookie", "ASVS V4.1");
+	// the protocol judges nothing about them, it only carries them.
+	Assets          []string `json:"assets,omitempty"`
+	TrustBoundaries []string `json:"trust_boundaries,omitempty"`
+	Controls        []string `json:"controls,omitempty"`
+	// Evidence lists the commands a reviewer must see run before the spec is
+	// done: program and arguments, never a shell, exactly like task checks.
+	Evidence []string `json:"evidence,omitempty"`
+	Body     string   `json:"body,omitempty"`
+	Fields   Fields   `json:"-"`
+}
+
+// HasSecurityImpact answers whether the spec declares any of the security
+// fields. An approved spec without them is a doctor warning: the reviewer
+// has nothing to look at.
+func (s *Spec) HasSecurityImpact() bool {
+	return len(s.Assets)+len(s.TrustBoundaries)+len(s.Controls)+len(s.Evidence) > 0
 }
 
 var reSpecID = regexp.MustCompile(`^[0-9]{3}-[a-z0-9]+(-[a-z0-9]+)*$`)
@@ -85,14 +101,18 @@ func ParseSpec(src []byte) (*Spec, error) {
 		return nil, err
 	}
 	s := &Spec{
-		ID:         d.Fields.Get("id"),
-		Title:      d.Fields.Get("title"),
-		Status:     Status(d.Fields.Get("status")),
-		Issue:      d.Fields.Get("issue"),
-		Supersedes: d.Fields.GetList("supersedes"),
-		DependsOn:  d.Fields.GetList("depends_on"),
-		Body:       d.Body,
-		Fields:     d.Fields,
+		ID:              d.Fields.Get("id"),
+		Title:           d.Fields.Get("title"),
+		Status:          Status(d.Fields.Get("status")),
+		Issue:           d.Fields.Get("issue"),
+		Supersedes:      d.Fields.GetList("supersedes"),
+		DependsOn:       d.Fields.GetList("depends_on"),
+		Assets:          d.Fields.GetList("assets"),
+		TrustBoundaries: d.Fields.GetList("trust_boundaries"),
+		Controls:        d.Fields.GetList("controls"),
+		Evidence:        d.Fields.GetList("evidence"),
+		Body:            d.Body,
+		Fields:          d.Fields,
 	}
 	if s.Status == "" {
 		s.Status = Draft
@@ -120,6 +140,13 @@ func (s *Spec) Validate() error {
 			}
 			if r == s.ID {
 				errs = append(errs, "a spec cannot reference itself in "+field)
+			}
+		}
+	}
+	for field, items := range map[string][]string{"assets": s.Assets, "trust_boundaries": s.TrustBoundaries, "controls": s.Controls, "evidence": s.Evidence} {
+		for _, it := range items {
+			if strings.TrimSpace(it) == "" {
+				errs = append(errs, field+" has an empty item")
 			}
 		}
 	}
@@ -153,11 +180,15 @@ func (s *Spec) Bytes() []byte {
 	} else {
 		d.Fields.Delete("issue")
 	}
-	for k, v := range map[string][]string{"supersedes": s.Supersedes, "depends_on": s.DependsOn} {
-		if len(v) > 0 {
-			d.Fields.SetList(k, v)
+	// Fixed order, so a spec written twice is the same bytes.
+	for _, kv := range []struct {
+		k string
+		v []string
+	}{{"supersedes", s.Supersedes}, {"depends_on", s.DependsOn}, {"assets", s.Assets}, {"trust_boundaries", s.TrustBoundaries}, {"controls", s.Controls}, {"evidence", s.Evidence}} {
+		if len(kv.v) > 0 {
+			d.Fields.SetList(kv.k, kv.v)
 		} else {
-			d.Fields.Delete(k)
+			d.Fields.Delete(kv.k)
 		}
 	}
 	return d.Bytes()
@@ -181,10 +212,20 @@ const (
 	ProblemSpecRefMissing = "spec-ref-missing"
 	// ProblemSpecNoSuccessor: a superseded spec no other spec supersedes.
 	ProblemSpecNoSuccessor = "spec-no-successor"
+	// ProblemSpecNoSecurity: an approved spec with no assets, trust
+	// boundaries, controls or evidence. A warning: the spec is still valid.
+	ProblemSpecNoSecurity = "spec-no-security"
 )
 
+// warnings are the problem codes doctor reports without failing.
+var warnings = map[string]bool{ProblemSpecNoSecurity: true}
+
+// Warning answers whether the problem is advice rather than a fault.
+func (p Problem) Warning() bool { return warnings[p.Code] }
+
 // CheckSpecs answers what is wrong across specs: a reference to a spec that
-// does not exist, or a superseded spec that no successor names.
+// does not exist, a superseded spec that no successor names, and — as a
+// warning — an approved spec that declares no security impact.
 func (l Layout) CheckSpecs(specs []*Spec) []Problem {
 	byID := map[string]*Spec{}
 	for _, s := range specs {
@@ -211,6 +252,9 @@ func (l Layout) CheckSpecs(specs []*Spec) []Problem {
 	for _, s := range specs {
 		if s.Status == Superseded && !successor[s.ID] {
 			problems = append(problems, Problem{ProblemSpecNoSuccessor, s.ID})
+		}
+		if s.Status == Approved && !s.HasSecurityImpact() {
+			problems = append(problems, Problem{ProblemSpecNoSecurity, s.ID})
 		}
 	}
 	return problems

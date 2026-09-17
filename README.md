@@ -69,6 +69,8 @@ go install github.com/emersonjoe/trilha-spec/cmd/trilha-spec@latest
 
 trilha-spec init --name my-app                 # .trilha/ with project, constitution, agents
 trilha-spec spec new "OAuth login"             # specs/001-oauth-login.md
+trilha-spec spec set 001-oauth-login --asset "session cookie" --control "ASVS V3.4" \
+    --evidence "go test ./internal/auth/..."   # security impact, handed to the agent and the reviewer
 trilha-spec spec move 001-oauth-login approved  # draft → approved → done; rejected, superseded
 trilha-spec task add "Provider config" --spec 001-oauth-login --status ready \
     --accept "config loads" --check "go test ./internal/oauth/..."

@@ -128,6 +128,18 @@ func (p *Pack) Markdown() string {
 	}
 	if p.Spec != nil {
 		fmt.Fprintf(&b, "## Specification %s — %s\n\n%s\n\n", p.Spec.ID, p.Spec.Title, strings.TrimSpace(p.Spec.Body))
+		// The security impact sits next to the acceptance and the checks:
+		// what the reviewer will look at is what the agent must keep in view.
+		list(&b, "Assets touched", p.Spec.Assets)
+		list(&b, "Trust boundaries", p.Spec.TrustBoundaries)
+		list(&b, "Controls affected", p.Spec.Controls)
+		if len(p.Spec.Evidence) > 0 {
+			b.WriteString("### Evidence the reviewer must see\n\n")
+			for _, c := range p.Spec.Evidence {
+				fmt.Fprintf(&b, "- `%s`\n", c)
+			}
+			b.WriteString("\n")
+		}
 	}
 	b.WriteString("## The task\n\n")
 	if body := strings.TrimSpace(p.Task.Body); body != "" {

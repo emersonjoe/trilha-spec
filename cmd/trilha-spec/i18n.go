@@ -52,6 +52,8 @@ func doctorMessage(p spec.Problem) string {
 		return fmt.Sprintf(T("spec reference does not exist: %s"), p.Arg)
 	case spec.ProblemSpecNoSuccessor:
 		return fmt.Sprintf(T("spec %s is superseded but no spec names it in `supersedes`"), p.Arg)
+	case spec.ProblemSpecNoSecurity:
+		return fmt.Sprintf(T("spec %s is approved but declares no security impact (assets, trust_boundaries, controls, evidence)"), p.Arg)
 	}
 	return p.String()
 }
@@ -61,8 +63,9 @@ const usagePT = `trilha-spec ` + version + ` — o protocolo aberto para trabalh
 uso: trilha-spec <comando> [flags]
 
   init [dir]                    cria .trilha/ (projeto, constituição, agentes)
-  spec new <título> [--issue N] [--body TEXTO | --body-file CAMINHO]
-  spec list [--status S] | show <id> | move <id> <status> | set <id> [--issue N] [--supersedes A,B] [--depends A,B]
+  spec new <título> [--issue N] [--body TEXTO | --body-file CAMINHO] [--asset A]... [--boundary B]... [--control C]... [--evidence CMD]...
+  spec list [--status S] | show <id> | move <id> <status>
+  spec set <id> [--issue N] [--supersedes A,B] [--depends A,B] [--asset A]... [--boundary B]... [--control C]... [--evidence CMD]...
   task add <título> [--spec ID] [--depends A,B] [--agent N] [--status S] [--accept C]... [--check CMD]...
            [--body TEXTO | --body-file CAMINHO]   (CAMINHO "-" lê stdin)
   task list [--status S] | show <id> | next | move <id> <status> | graph [--dot]
@@ -90,9 +93,9 @@ var pt = map[string]string{
 	"  created %s\n": "  criado %s\n",
 	"next: describe the project in .trilha/project.md, then `trilha-spec spec new \"<title>\"`\n": "próximo passo: descreva o projeto em .trilha/project.md e depois `trilha-spec spec new \"<título>\"`\n",
 	// spec
-	"usage: trilha-spec spec new <title> | list | show <id> | move <id> <status> | set <id> [flags]": "uso: trilha-spec spec new <título> | list | show <id> | move <id> <status> | set <id> [flags]",
-	"usage: trilha-spec spec move <id> <status>":                                                     "uso: trilha-spec spec move <id> <status>",
-	"usage: trilha-spec spec set <id> [--issue N] [--supersedes A,B] [--depends A,B]":                "uso: trilha-spec spec set <id> [--issue N] [--supersedes A,B] [--depends A,B]",
+	"usage: trilha-spec spec new <title> | list | show <id> | move <id> <status> | set <id> [flags]":                                                        "uso: trilha-spec spec new <título> | list | show <id> | move <id> <status> | set <id> [flags]",
+	"usage: trilha-spec spec move <id> <status>":                                                                                                            "uso: trilha-spec spec move <id> <status>",
+	"usage: trilha-spec spec set <id> [--issue N] [--supersedes A,B] [--depends A,B] [--asset A]... [--boundary B]... [--control C]... [--evidence CMD]...": "uso: trilha-spec spec set <id> [--issue N] [--supersedes A,B] [--depends A,B] [--asset A]... [--boundary B]... [--control C]... [--evidence CMD]...",
 	"updated %s\n":                         "atualizado %s\n",
 	"usage: trilha-spec spec new <title>":  "uso: trilha-spec spec new <título>",
 	"usage: trilha-spec spec show <id>":    "uso: trilha-spec spec show <id>",
@@ -129,9 +132,11 @@ var pt = map[string]string{
 	// doctor
 	"✓ %s is healthy\n": "✓ %s está saudável\n",
 	"%d problem(s)":     "%d problema(s)",
-	"missing directory %s (run `trilha-spec init`)":              "falta o diretório %s (rode `trilha-spec init`)",
-	"missing %s (run `trilha-spec init`)":                        "falta %s (rode `trilha-spec init`)",
-	"spec reference does not exist: %s":                          "referência a spec inexistente: %s",
-	"spec %s is superseded but no spec names it in `supersedes`": "a spec %s está superseded mas nenhuma spec a cita em `supersedes`",
+	"%d warning(s)\n":   "%d aviso(s)\n",
+	"spec %s is approved but declares no security impact (assets, trust_boundaries, controls, evidence)": "a spec %s está approved mas não declara impacto de segurança (assets, trust_boundaries, controls, evidence)",
+	"missing directory %s (run `trilha-spec init`)":                                                      "falta o diretório %s (rode `trilha-spec init`)",
+	"missing %s (run `trilha-spec init`)":                                                                "falta %s (rode `trilha-spec init`)",
+	"spec reference does not exist: %s":                                                                  "referência a spec inexistente: %s",
+	"spec %s is superseded but no spec names it in `supersedes`":                                         "a spec %s está superseded mas nenhuma spec a cita em `supersedes`",
 	".trilha/.gitignore ignores everything (`*`): specs, tasks and evidence will not be committed; run `trilha-spec init` to rewrite it": ".trilha/.gitignore ignora tudo (`*`): specs, tasks e evidência não serão commitadas; rode `trilha-spec init` para reescrevê-lo",
 }

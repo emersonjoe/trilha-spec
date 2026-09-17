@@ -174,6 +174,15 @@ várias Attempts. A linhagem de correção usa `retry_of` com ID de Run, nunca I
 | `issue` | não | a issue que é a fonte do escopo |
 | `supersedes` | não | IDs de spec que esta substitui; todos precisam existir |
 | `depends_on` | não | IDs de spec em que esta se apoia; todos precisam existir |
+| `assets` | não | o que a mudança toca, para o revisor de segurança: identificadores livres |
+| `trust_boundaries` | não | as fronteiras que ela cruza (`browser → api`) |
+| `controls` | não | os controles que ela afeta (`ASVS V4.1`); identificadores livres |
+| `evidence` | não | comandos que um revisor precisa ver rodar: programa e argumentos, sem shell, como `checks` de task (§3) |
+
+Os quatro campos de segurança são o **impacto de segurança** da spec. O protocolo os carrega e
+não julga nada sobre eles: se os controles bastam é decisão do revisor. O pacote de contexto
+(§6) os entrega ao agente ao lado do aceite e dos checks da task; uma spec `approved` que não
+declara nenhum deles é um aviso do `doctor`, não uma falha.
 
 O corpo é a especificação: por quê, o que muda, fora de escopo, aceitação. `draft` está sendo
 escrita; `approved` foi acordada e pode virar tasks; `done` tem toda task entregue; `rejected`
