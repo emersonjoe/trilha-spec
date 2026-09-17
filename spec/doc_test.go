@@ -136,7 +136,7 @@ func TestInitAndFind(t *testing.T) {
 	}
 	// The framework's dev server clobbers .gitignore with `*`; doctor sees it.
 	os.WriteFile(filepath.Join(l.Dir(), ".gitignore"), []byte("*\n"), 0o644)
-	if problems := l.Doctor(); len(problems) != 1 || !strings.Contains(problems[0], "ignores everything") {
+	if problems := l.Doctor(); len(problems) != 1 || !strings.Contains(problems[0].String(), "ignores everything") {
 		t.Fatalf("doctor: %v", problems)
 	}
 	if _, err := Find(t.TempDir()); err != ErrNotInitialized {

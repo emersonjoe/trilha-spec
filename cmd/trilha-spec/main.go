@@ -33,7 +33,7 @@ usage: trilha-spec <command> [flags]
 
   init [dir]                    create .trilha/ (project, constitution, agents)
   spec new <title> | list | show <id>
-  task add <title> [--spec ID] [--depends A,B] [--agent N] [--accept C]... [--check CMD]...
+  task add <title> [--spec ID] [--depends A,B] [--agent N] [--status S] [--accept C]... [--check CMD]...
   task list [--status S] | show <id> | next | move <id> <status> | graph [--dot]
   agent list | show <name>
   context <task-id>             the context pack an agent receives (--json for tools)
@@ -44,16 +44,17 @@ usage: trilha-spec <command> [flags]
   version
 
 Every listing takes --json. Statuses: idea spec ready running verify review done blocked failed.
+TRILHA_LANG=pt translates the messages; file formats and --json do not change.
 `
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprint(os.Stderr, usage)
+		fmt.Fprint(os.Stderr, T(usage))
 		os.Exit(2)
 	}
 	err := run(os.Args[1], os.Args[2:], os.Stdout)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
+		fmt.Fprintln(os.Stderr, T("error:"), err)
 		os.Exit(1)
 	}
 }
@@ -82,10 +83,10 @@ func run(cmd string, args []string, out io.Writer) error {
 		fmt.Fprintln(out, "trilha-spec", version)
 		return nil
 	case "help", "-h", "--help":
-		fmt.Fprint(out, usage)
+		fmt.Fprint(out, T(usage))
 		return nil
 	}
-	return fmt.Errorf("unknown command %q\n%s", cmd, usage)
+	return fmt.Errorf(T("unknown command %q\n%s"), cmd, T(usage))
 }
 
 // multi collects a repeatable flag.
@@ -131,19 +132,19 @@ func cmdInit(args []string, out io.Writer) error {
 		return err
 	}
 	if len(wrote) == 0 {
-		fmt.Fprintf(out, "%s already initialized; nothing written\n", l.Dir())
+		fmt.Fprintf(out, T("%s already initialized; nothing written\n"), l.Dir())
 		return nil
 	}
 	for _, w := range wrote {
-		fmt.Fprintln(out, "  created", w)
+		fmt.Fprintf(out, T("  created %s\n"), w)
 	}
-	fmt.Fprintln(out, "next: describe the project in .trilha/project.md, then `trilha-spec spec new \"<title>\"`")
+	fmt.Fprint(out, T("next: describe the project in .trilha/project.md, then `trilha-spec spec new \"<title>\"`\n"))
 	return nil
 }
 
 func cmdSpec(args []string, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: trilha-spec spec new <title> | list | show <id>")
+		return errors.New(T("usage: trilha-spec spec new <title> | list | show <id>"))
 	}
 	st, err := store()
 	if err != nil {
@@ -160,7 +161,7 @@ func cmdSpec(args []string, out io.Writer) error {
 		}
 		title := strings.TrimSpace(strings.Join(pos, " "))
 		if title == "" {
-			return errors.New("usage: trilha-spec spec new <title>")
+			return errors.New(T("usage: trilha-spec spec new <title>"))
 		}
 		id, err := l.NextSpecID(title)
 		if err != nil {
@@ -171,7 +172,7 @@ func cmdSpec(args []string, out io.Writer) error {
 		if err := l.SaveSpec(s); err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "created %s (%s)\n", id, rel(l, l.SpecFile(id)))
+		fmt.Fprintf(out, T("created %s (%s)\n"), id, rel(l, l.SpecFile(id)))
 		return nil
 	case "list":
 		fs := flags("spec list")
@@ -198,7 +199,7 @@ func cmdSpec(args []string, out io.Writer) error {
 			return err
 		}
 		if len(pos) != 1 {
-			return errors.New("usage: trilha-spec spec show <id>")
+			return errors.New(T("usage: trilha-spec spec show <id>"))
 		}
 		s, err := l.LoadSpec(pos[0])
 		if err != nil {
@@ -210,12 +211,12 @@ func cmdSpec(args []string, out io.Writer) error {
 		_, err = out.Write(s.Bytes())
 		return err
 	}
-	return fmt.Errorf("unknown spec command %q", args[0])
+	return fmt.Errorf(T("unknown spec command %q"), args[0])
 }
 
 func cmdTask(args []string, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: trilha-spec task add|list|show|next|move|graph")
+		return errors.New(T("usage: trilha-spec task add|list|show|next|move|graph"))
 	}
 	st, err := store()
 	if err != nil {
@@ -237,7 +238,7 @@ func cmdTask(args []string, out io.Writer) error {
 		}
 		title := strings.TrimSpace(strings.Join(pos, " "))
 		if title == "" {
-			return errors.New("usage: trilha-spec task add <title> [flags]")
+			return errors.New(T("usage: trilha-spec task add <title> [flags]"))
 		}
 		t, err := st.Create(title, func(t *task.Task) {
 			t.Spec = *specID
@@ -258,7 +259,7 @@ func cmdTask(args []string, out io.Writer) error {
 			os.Remove(st.Layout.TaskFile(t.ID))
 			return err
 		}
-		fmt.Fprintf(out, "created %s (%s)\n", t.ID, rel(st.Layout, st.Layout.TaskFile(t.ID)))
+		fmt.Fprintf(out, T("created %s (%s)\n"), t.ID, rel(st.Layout, st.Layout.TaskFile(t.ID)))
 		return nil
 	case "list":
 		fs := flags("task list")
@@ -284,7 +285,7 @@ func cmdTask(args []string, out io.Writer) error {
 		if *asJSON {
 			return printJSON(out, kept)
 		}
-		fmt.Fprintf(out, "%-10s %-8s %-40s %s\n", "ID", "STATUS", "TITLE", "WAITING ON")
+		fmt.Fprintf(out, "%-10s %-8s %-40s %s\n", T("ID"), T("STATUS"), T("TITLE"), T("WAITING ON"))
 		for _, t := range kept {
 			fmt.Fprintf(out, "%-10s %-8s %-40s %s\n", t.ID, t.Status, trunc(t.Title, 40), strings.Join(g.Blockers(t.ID), ","))
 		}
@@ -297,7 +298,7 @@ func cmdTask(args []string, out io.Writer) error {
 			return err
 		}
 		if len(pos) != 1 {
-			return errors.New("usage: trilha-spec task show <id>")
+			return errors.New(T("usage: trilha-spec task show <id>"))
 		}
 		t, err := st.Get(pos[0])
 		if err != nil {
@@ -326,7 +327,7 @@ func cmdTask(args []string, out io.Writer) error {
 			return printJSON(out, ready)
 		}
 		if len(ready) == 0 {
-			fmt.Fprintln(out, "nothing ready: no task is `ready` with every dependency done")
+			fmt.Fprint(out, T("nothing ready: no task is `ready` with every dependency done\n"))
 			return nil
 		}
 		for _, t := range ready {
@@ -335,13 +336,13 @@ func cmdTask(args []string, out io.Writer) error {
 		return nil
 	case "move":
 		if len(args) != 3 {
-			return errors.New("usage: trilha-spec task move <id> <status>")
+			return errors.New(T("usage: trilha-spec task move <id> <status>"))
 		}
 		t, err := st.Move(args[1], task.Status(args[2]))
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "%s is now %s\n", t.ID, t.Status)
+		fmt.Fprintf(out, T("%s is now %s\n"), t.ID, t.Status)
 		return nil
 	case "graph":
 		fs := flags("task graph")
@@ -360,12 +361,12 @@ func cmdTask(args []string, out io.Writer) error {
 		}
 		return nil
 	}
-	return fmt.Errorf("unknown task command %q", args[0])
+	return fmt.Errorf(T("unknown task command %q"), args[0])
 }
 
 func cmdAgent(args []string, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: trilha-spec agent list | show <name>")
+		return errors.New(T("usage: trilha-spec agent list | show <name>"))
 	}
 	st, err := store()
 	if err != nil {
@@ -391,7 +392,7 @@ func cmdAgent(args []string, out io.Writer) error {
 		return nil
 	case "show":
 		if len(args) != 2 {
-			return errors.New("usage: trilha-spec agent show <name>")
+			return errors.New(T("usage: trilha-spec agent show <name>"))
 		}
 		a, err := agent.Load(st.Layout, args[1])
 		if err != nil {
@@ -400,7 +401,7 @@ func cmdAgent(args []string, out io.Writer) error {
 		_, err = out.Write(a.Bytes())
 		return err
 	}
-	return fmt.Errorf("unknown agent command %q", args[0])
+	return fmt.Errorf(T("unknown agent command %q"), args[0])
 }
 
 func cmdContext(args []string, out io.Writer) error {
@@ -411,7 +412,7 @@ func cmdContext(args []string, out io.Writer) error {
 		return err
 	}
 	if len(pos) != 1 {
-		return errors.New("usage: trilha-spec context <task-id>")
+		return errors.New(T("usage: trilha-spec context <task-id>"))
 	}
 	st, err := store()
 	if err != nil {
@@ -443,7 +444,7 @@ func cmdVerify(args []string, out io.Writer) error {
 		return err
 	}
 	if len(pos) != 1 {
-		return errors.New("usage: trilha-spec verify <task-id> [--dir D]")
+		return errors.New(T("usage: trilha-spec verify <task-id> [--dir D]"))
 	}
 	st, err := store()
 	if err != nil {
@@ -485,19 +486,19 @@ func cmdVerify(args []string, out io.Writer) error {
 			fmt.Fprintf(out, "%s %s\n", mark, e.Note)
 		}
 	}
-	fmt.Fprintf(out, "evidence: %d record(s) in %s\n", len(v.Paths), rel(st.Layout, st.Layout.EvidenceDir(t.ID)))
+	fmt.Fprintf(out, T("evidence: %d record(s) in %s\n"), len(v.Paths), rel(st.Layout, st.Layout.EvidenceDir(t.ID)))
 	if moved != "" {
-		fmt.Fprintf(out, "%s is now %s\n", t.ID, moved)
+		fmt.Fprintf(out, T("%s is now %s\n"), t.ID, moved)
 	}
 	if !v.Passed {
-		return errors.New("verification failed")
+		return errors.New(T("verification failed"))
 	}
 	return nil
 }
 
 func cmdEvidence(args []string, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: trilha-spec evidence <task-id> [add --note TEXT]")
+		return errors.New(T("usage: trilha-spec evidence <task-id> [add --note TEXT]"))
 	}
 	st, err := store()
 	if err != nil {
@@ -514,7 +515,7 @@ func cmdEvidence(args []string, out io.Writer) error {
 			return err
 		}
 		if *note == "" && len(files) == 0 {
-			return errors.New("evidence add needs --note or --file")
+			return errors.New(T("evidence add needs --note or --file"))
 		}
 		kind := "note"
 		if len(files) > 0 {
@@ -524,7 +525,7 @@ func cmdEvidence(args []string, out io.Writer) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "recorded #%d (%s)\n", e.Seq, rel(st.Layout, p))
+		fmt.Fprintf(out, T("recorded #%d (%s)\n"), e.Seq, rel(st.Layout, p))
 		return nil
 	}
 	fs := flags("evidence")
@@ -568,9 +569,9 @@ func cmdMCP(args []string) error {
 	}
 	s := mcp.NewServer("trilha-spec", version, mcp.Tools(st.Layout, *write)...)
 	// stderr, never stdout: stdout is the protocol.
-	fmt.Fprintf(os.Stderr, "trilha-spec mcp %s · %s\ntools: %s\n", version, st.Layout.Root, strings.Join(s.Tools(), ", "))
+	fmt.Fprintf(os.Stderr, T("trilha-spec mcp %s · %s\ntools: %s\n"), version, st.Layout.Root, strings.Join(s.Tools(), ", "))
 	if !*write {
-		fmt.Fprintln(os.Stderr, "read-only; pass --write to offer trilha_move, trilha_evidence and trilha_verify")
+		fmt.Fprint(os.Stderr, T("read-only; pass --write to offer trilha_move, trilha_evidence and trilha_verify\n"))
 	}
 	return s.ServeStdio(context.Background(), os.Stdin, os.Stdout)
 }
@@ -580,7 +581,10 @@ func cmdDoctor(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	problems := st.Layout.Doctor()
+	var problems []string
+	for _, p := range st.Layout.Doctor() {
+		problems = append(problems, doctorMessage(p))
+	}
 	if _, err := st.List(); err != nil {
 		problems = append(problems, err.Error())
 	} else if _, err := st.Graph(); err != nil {
@@ -593,13 +597,13 @@ func cmdDoctor(args []string, out io.Writer) error {
 		problems = append(problems, err.Error())
 	}
 	if len(problems) == 0 {
-		fmt.Fprintln(out, "✓", st.Layout.Dir(), "is healthy")
+		fmt.Fprintf(out, T("✓ %s is healthy\n"), st.Layout.Dir())
 		return nil
 	}
 	for _, p := range problems {
 		fmt.Fprintln(out, "✗", p)
 	}
-	return fmt.Errorf("%d problem(s)", len(problems))
+	return fmt.Errorf(T("%d problem(s)"), len(problems))
 }
 
 func rel(l spec.Layout, p string) string {

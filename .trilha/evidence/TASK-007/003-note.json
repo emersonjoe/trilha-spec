@@ -1,0 +1,10 @@
+{
+  "task": "TASK-007",
+  "seq": 3,
+  "kind": "note",
+  "at": "2026-09-17T21:33:29Z",
+  "by": "claude-opus-5",
+  "exit_code": 0,
+  "passed": true,
+  "note": "Spec 002 implemented: i18n catalogue, doctor problems, e2e under TRILHA_LANG=pt-BR; README and hands-on chapter updated in both locales."
+}

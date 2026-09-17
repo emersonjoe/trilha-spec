@@ -79,6 +79,8 @@ trilha-spec mcp --write                        # o mesmo por MCP, para Claude Co
 ```
 
 Toda listagem aceita `--json`. `trilha-spec doctor` diz onde um leitor tropeçaria.
+`TRILHA_LANG=pt` (ou `pt-BR`) põe toda mensagem em português, `--help` incluído; os arquivos e
+o `--json` não mudam, porque nomes de status, de campo e IDs são o protocolo.
 
 ### MCP
 

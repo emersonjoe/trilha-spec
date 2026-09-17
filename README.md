@@ -83,6 +83,8 @@ trilha-spec mcp --write                        # the same over MCP, for Claude C
 ```
 
 Every listing takes `--json`. `trilha-spec doctor` says what a reader would trip on.
+`TRILHA_LANG=pt` (or `pt-BR`) puts every message, `--help` included, in Portuguese; the files
+and `--json` do not change, because status names, field names and IDs are the protocol.
 
 ### MCP
 

@@ -152,26 +152,53 @@ func Init(root string, o InitOptions) (Layout, []string, error) {
 	return l, wrote, nil
 }
 
+// Problem is one thing Doctor found. Code is stable so a CLI can render it
+// in its own language; String is the English rendering.
+type Problem struct {
+	Code string
+	// Arg is the path or ID the problem is about, relative to Root.
+	Arg string
+}
+
+// Problem codes.
+const (
+	ProblemMissingDir   = "missing-dir"
+	ProblemMissingFile  = "missing-file"
+	ProblemGitignoreAll = "gitignore-all"
+)
+
+func (p Problem) String() string {
+	switch p.Code {
+	case ProblemMissingDir:
+		return fmt.Sprintf("missing directory %s (run `trilha-spec init`)", p.Arg)
+	case ProblemMissingFile:
+		return fmt.Sprintf("missing %s (run `trilha-spec init`)", p.Arg)
+	case ProblemGitignoreAll:
+		return ".trilha/.gitignore ignores everything (`*`): specs, tasks and evidence will not be committed; run `trilha-spec init` to rewrite it"
+	}
+	return p.Code + " " + p.Arg
+}
+
 // Doctor lists what is wrong with a layout that a reader would trip on: a
 // missing directory, or a .gitignore that hides the protocol from git.
-func (l Layout) Doctor() []string {
-	var problems []string
+func (l Layout) Doctor() []Problem {
+	var problems []Problem
 	for _, d := range []string{l.Specs(), l.Tasks(), l.Agents(), l.Evidence()} {
 		if st, err := os.Stat(d); err != nil || !st.IsDir() {
 			rel, _ := filepath.Rel(l.Root, d)
-			problems = append(problems, fmt.Sprintf("missing directory %s (run `trilha-spec init`)", filepath.ToSlash(rel)))
+			problems = append(problems, Problem{ProblemMissingDir, filepath.ToSlash(rel)})
 		}
 	}
 	for _, f := range []string{l.Project(), l.Constitution()} {
 		if _, err := os.Stat(f); err != nil {
 			rel, _ := filepath.Rel(l.Root, f)
-			problems = append(problems, fmt.Sprintf("missing %s (run `trilha-spec init`)", filepath.ToSlash(rel)))
+			problems = append(problems, Problem{ProblemMissingFile, filepath.ToSlash(rel)})
 		}
 	}
 	if b, err := os.ReadFile(filepath.Join(l.Dir(), ".gitignore")); err == nil {
 		for _, line := range strings.Split(string(b), "\n") {
 			if strings.TrimSpace(line) == "*" {
-				problems = append(problems, ".trilha/.gitignore ignores everything (`*`): specs, tasks and evidence will not be committed; run `trilha-spec init` to rewrite it")
+				problems = append(problems, Problem{Code: ProblemGitignoreAll})
 				break
 			}
 		}

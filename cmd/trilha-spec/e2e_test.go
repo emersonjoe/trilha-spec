@@ -30,8 +30,15 @@ func TestMain(m *testing.M) {
 
 func cli(t *testing.T, dir string, args ...string) (string, error) {
 	t.Helper()
+	return cliEnv(t, dir, nil, args...)
+}
+
+// cliEnv runs the binary with extra environment entries (KEY=VALUE).
+func cliEnv(t *testing.T, dir string, env []string, args ...string) (string, error) {
+	t.Helper()
 	cmd := exec.Command(bin, args...)
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), env...)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }
@@ -113,6 +120,43 @@ func TestLifecycle(t *testing.T) {
 	gi, _ := os.ReadFile(filepath.Join(dir, ".trilha", ".gitignore"))
 	if strings.Contains(string(gi), "\n*\n") || !strings.Contains(string(gi), "runs/") {
 		t.Fatalf("gitignore:\n%s", gi)
+	}
+}
+
+// TRILHA_LANG=pt translates what the operator reads; --json and the files
+// are the protocol and do not move.
+func TestPortugueseMessages(t *testing.T) {
+	dir := t.TempDir()
+	pt := []string{"TRILHA_LANG=pt-BR"}
+	out, err := cliEnv(t, dir, pt, "task", "list")
+	if err == nil || !strings.Contains(out, "erro:") {
+		t.Fatalf("error prefix:\n%s", out)
+	}
+	if out, _ := cliEnv(t, dir, pt, "--help"); !strings.Contains(out, "uso: trilha-spec <comando>") {
+		t.Fatalf("help:\n%s", out)
+	}
+	must(t, dir, "init", "--name", "demo")
+	if out, err := cliEnv(t, dir, pt, "task", "add", "Uma task", "--status", "ready", "--accept", "ok"); err != nil || !strings.Contains(out, "criado TASK-001") {
+		t.Fatalf("task add: %v\n%s", err, out)
+	}
+	if out, _ := cliEnv(t, dir, pt, "task", "list"); !strings.Contains(out, "TÍTULO") || !strings.Contains(out, "AGUARDANDO") {
+		t.Fatalf("task list:\n%s", out)
+	}
+	if out, _ := cliEnv(t, dir, pt, "task", "list", "--json"); !strings.Contains(out, `"status": "ready"`) {
+		t.Fatalf("--json must not translate:\n%s", out)
+	}
+	if out, _ := cliEnv(t, dir, pt, "task", "move", "TASK-001", "running"); !strings.Contains(out, "TASK-001 agora está running") {
+		t.Fatalf("move:\n%s", out)
+	}
+	if out, _ := cliEnv(t, dir, pt, "doctor"); !strings.Contains(out, "está saudável") {
+		t.Fatalf("doctor:\n%s", out)
+	}
+	os.WriteFile(filepath.Join(dir, ".trilha", ".gitignore"), []byte("*\n"), 0o644)
+	if out, err := cliEnv(t, dir, pt, "doctor"); err == nil || !strings.Contains(out, "ignora tudo") || !strings.Contains(out, "1 problema(s)") {
+		t.Fatalf("doctor pt:\n%s", out)
+	}
+	if out, _ := cliEnv(t, dir, []string{"TRILHA_LANG=fr"}, "task", "list"); !strings.Contains(out, "TITLE") {
+		t.Fatalf("unknown language must fall back to English:\n%s", out)
 	}
 }
 
