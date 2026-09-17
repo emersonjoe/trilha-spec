@@ -32,7 +32,8 @@ const usage = `trilha-spec ` + version + ` — the open protocol for work agents
 usage: trilha-spec <command> [flags]
 
   init [dir]                    create .trilha/ (project, constitution, agents)
-  spec new <title> [--issue N] [--body TEXT | --body-file PATH] | list | show <id>
+  spec new <title> [--issue N] [--body TEXT | --body-file PATH]
+  spec list [--status S] | show <id> | move <id> <status> | set <id> [--issue N] [--supersedes A,B] [--depends A,B]
   task add <title> [--spec ID] [--depends A,B] [--agent N] [--status S] [--accept C]... [--check CMD]...
            [--body TEXT | --body-file PATH]   (PATH "-" reads stdin)
   task list [--status S] | show <id> | next | move <id> <status> | graph [--dot]
@@ -44,7 +45,8 @@ usage: trilha-spec <command> [flags]
   doctor                        what a reader would trip on
   version
 
-Every listing takes --json. Statuses: idea spec ready running verify review done blocked failed.
+Every listing takes --json. Task statuses: idea spec ready running verify review done blocked failed.
+Spec statuses: draft approved done rejected superseded.
 TRILHA_LANG=pt translates the messages and the templates init and spec new write; file formats and --json do not change.
 `
 
@@ -145,7 +147,7 @@ func cmdInit(args []string, out io.Writer) error {
 
 func cmdSpec(args []string, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New(T("usage: trilha-spec spec new <title> | list | show <id>"))
+		return errors.New(T("usage: trilha-spec spec new <title> | list | show <id> | move <id> <status> | set <id> [flags]"))
 	}
 	st, err := store()
 	if err != nil {
@@ -183,6 +185,7 @@ func cmdSpec(args []string, out io.Writer) error {
 	case "list":
 		fs := flags("spec list")
 		asJSON := fs.Bool("json", false, "")
+		status := fs.String("status", "", "filter by status")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -190,12 +193,75 @@ func cmdSpec(args []string, out io.Writer) error {
 		if err != nil {
 			return err
 		}
-		if *asJSON {
-			return printJSON(out, specs)
-		}
+		var kept []*spec.Spec
 		for _, s := range specs {
-			fmt.Fprintf(out, "%-28s %-9s %s\n", s.ID, s.Status, s.Title)
+			if *status == "" || string(s.Status) == *status {
+				kept = append(kept, s)
+			}
 		}
+		if *asJSON {
+			if kept == nil {
+				kept = []*spec.Spec{}
+			}
+			return printJSON(out, kept)
+		}
+		for _, s := range kept {
+			fmt.Fprintf(out, "%-28s %-10s %s\n", s.ID, s.Status, s.Title)
+		}
+		return nil
+	case "move":
+		if len(args) != 3 {
+			return errors.New(T("usage: trilha-spec spec move <id> <status>"))
+		}
+		s, err := l.MoveSpec(args[1], spec.Status(args[2]))
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(out, T("%s is now %s\n"), s.ID, s.Status)
+		return nil
+	case "set":
+		fs := flags("spec set")
+		issue := fs.String("issue", "", "issue URL or number; \"\" keeps, \"-\" clears")
+		supersedes := fs.String("supersedes", "", "comma-separated spec ids this one replaces")
+		deps := fs.String("depends", "", "comma-separated spec ids this one builds on")
+		pos, err := parse(fs, args[1:])
+		if err != nil {
+			return err
+		}
+		if len(pos) != 1 {
+			return errors.New(T("usage: trilha-spec spec set <id> [--issue N] [--supersedes A,B] [--depends A,B]"))
+		}
+		s, err := l.LoadSpec(pos[0])
+		if err != nil {
+			return err
+		}
+		switch *issue {
+		case "":
+		case "-":
+			s.Issue = ""
+		default:
+			s.Issue = *issue
+		}
+		if *supersedes != "" {
+			s.Supersedes = splitList(*supersedes)
+		}
+		if *deps != "" {
+			s.DependsOn = splitList(*deps)
+		}
+		if err := s.Validate(); err != nil {
+			return err
+		}
+		if all, err := l.ListSpecs(); err == nil {
+			for _, p := range l.CheckSpecs(replaceSpec(all, s)) {
+				if p.Code == spec.ProblemSpecRefMissing && strings.HasPrefix(p.Arg, s.ID+" ") {
+					return errors.New(doctorMessage(p))
+				}
+			}
+		}
+		if err := l.SaveSpec(s); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, T("updated %s\n"), s.ID)
 		return nil
 	case "show":
 		fs := flags("spec show")
@@ -258,11 +324,7 @@ func cmdTask(args []string, out io.Writer) error {
 			t.Acceptance = accept
 			t.Checks = checks
 			t.Body = text
-			for _, d := range strings.Split(*deps, ",") {
-				if d = strings.TrimSpace(d); d != "" {
-					t.DependsOn = append(t.DependsOn, d)
-				}
-			}
+			t.DependsOn = splitList(*deps)
 		})
 		if err != nil {
 			return err
@@ -602,8 +664,12 @@ func cmdDoctor(args []string, out io.Writer) error {
 	} else if _, err := st.Graph(); err != nil {
 		problems = append(problems, err.Error())
 	}
-	if _, err := st.Layout.ListSpecs(); err != nil {
+	if specs, err := st.Layout.ListSpecs(); err != nil {
 		problems = append(problems, err.Error())
+	} else {
+		for _, p := range st.Layout.CheckSpecs(specs) {
+			problems = append(problems, doctorMessage(p))
+		}
 	}
 	if _, err := agent.List(st.Layout); err != nil {
 		problems = append(problems, err.Error())
@@ -623,6 +689,31 @@ func rel(l spec.Layout, p string) string {
 		return r
 	}
 	return p
+}
+
+// splitList cuts a comma-separated flag into its items, blanks dropped.
+func splitList(v string) []string {
+	var out []string
+	for _, it := range strings.Split(v, ",") {
+		if it = strings.TrimSpace(it); it != "" {
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
+// replaceSpec answers all with s in place of the spec of the same ID, so a
+// cross-check sees the spec as it is about to be saved.
+func replaceSpec(all []*spec.Spec, s *spec.Spec) []*spec.Spec {
+	out := make([]*spec.Spec, 0, len(all))
+	for _, x := range all {
+		if x.ID == s.ID {
+			out = append(out, s)
+		} else {
+			out = append(out, x)
+		}
+	}
+	return out
 }
 
 func trunc(s string, n int) string {

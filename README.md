@@ -69,6 +69,7 @@ go install github.com/emersonjoe/trilha-spec/cmd/trilha-spec@latest
 
 trilha-spec init --name my-app                 # .trilha/ with project, constitution, agents
 trilha-spec spec new "OAuth login"             # specs/001-oauth-login.md
+trilha-spec spec move 001-oauth-login approved  # draft → approved → done; rejected, superseded
 trilha-spec task add "Provider config" --spec 001-oauth-login --status ready \
     --accept "config loads" --check "go test ./internal/oauth/..."
 trilha-spec task add "Login page" --depends TASK-001 --status ready --accept "login works" \
@@ -91,8 +92,9 @@ not change, because status names, field names and IDs are the protocol.
 ### MCP
 
 `trilha-spec mcp` serves the protocol over stdio to any MCP host. Read-only by default
-(`trilha_list_tasks`, `trilha_get_task`, `trilha_next`, `trilha_context`, `trilha_graph`);
-`--write` adds `trilha_move`, `trilha_evidence` and `trilha_verify`. A tool that is not offered
+(`trilha_list_tasks`, `trilha_get_task`, `trilha_next`, `trilha_context`, `trilha_list_specs`,
+`trilha_graph`); `--write` adds `trilha_move`, `trilha_spec_move`, `trilha_evidence` and
+`trilha_verify`. A tool that is not offered
 cannot be called.
 
 ```json

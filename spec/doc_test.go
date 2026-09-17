@@ -204,3 +204,90 @@ func TestTemplatesByLanguage(t *testing.T) {
 		t.Fatalf("body must replace the template: %q", s.Body)
 	}
 }
+
+func TestSpecLifecycle(t *testing.T) {
+	s := &Spec{ID: "001-a", Title: "A", Status: Draft}
+	if err := s.Move(Done); err == nil || !strings.Contains(err.Error(), "cannot move from draft to done") {
+		t.Fatalf("draft → done accepted: %v", err)
+	}
+	for _, to := range []Status{Approved, Done, Superseded} {
+		if err := s.Move(to); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.Move(Draft); err == nil {
+		t.Fatal("superseded is final")
+	}
+	if err := s.Move("nope"); err == nil || !strings.Contains(err.Error(), "is not a status") {
+		t.Fatalf("unknown status: %v", err)
+	}
+	r := &Spec{ID: "002-b", Title: "B", Status: Rejected}
+	if err := r.Move(Draft); err != nil {
+		t.Fatal(err)
+	}
+	// Every status in the table is a real status, and every target too.
+	for from, tos := range Transitions {
+		if !from.Valid() {
+			t.Errorf("%q in Transitions is not a status", from)
+		}
+		for _, to := range tos {
+			if !to.Valid() {
+				t.Errorf("%q → %q: target is not a status", from, to)
+			}
+		}
+	}
+	bad := &Spec{ID: "003-c", Title: "C", Status: Approved, Supersedes: []string{"003-c", "x"}, DependsOn: []string{"001-a"}}
+	err := bad.Validate()
+	if err == nil || !strings.Contains(err.Error(), "cannot reference itself in supersedes") || !strings.Contains(err.Error(), `supersedes "x" is not a spec id`) {
+		t.Fatalf("validate: %v", err)
+	}
+}
+
+func TestSpecRelationsRoundTripAndCheck(t *testing.T) {
+	l, _, err := Init(t.TempDir(), InitOptions{Name: "demo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := NewSpecDoc("001-old", "Old", "en", "")
+	old.Status = Superseded
+	succ := NewSpecDoc("002-new", "New", "en", "")
+	succ.Supersedes = []string{"001-old"}
+	succ.DependsOn = []string{"009-missing"}
+	for _, s := range []*Spec{old, succ} {
+		if err := l.SaveSpec(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := l.LoadSpec("002-new")
+	if err != nil || got.Supersedes[0] != "001-old" || got.DependsOn[0] != "009-missing" {
+		t.Fatalf("round trip: %v %+v", err, got)
+	}
+	b, _ := os.ReadFile(l.SpecFile("002-new"))
+	if !strings.Contains(string(b), "supersedes:\n  - 001-old\ndepends_on:\n  - 009-missing\n") {
+		t.Fatalf("written:\n%s", b)
+	}
+	specs, _ := l.ListSpecs()
+	problems := l.CheckSpecs(specs)
+	if len(problems) != 1 || problems[0].Code != ProblemSpecRefMissing || problems[0].Arg != "002-new depends_on 009-missing" {
+		t.Fatalf("problems: %+v", problems)
+	}
+	// A superseded spec nobody supersedes is an orphan.
+	succ.Supersedes = nil
+	specs = []*Spec{old, succ}
+	problems = l.CheckSpecs(specs)
+	found := false
+	for _, p := range problems {
+		if p.Code == ProblemSpecNoSuccessor && p.Arg == "001-old" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("orphan not reported: %+v", problems)
+	}
+	if _, err := l.MoveSpec("002-new", Approved); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := l.LoadSpec("002-new"); s.Status != Approved {
+		t.Fatalf("move not saved: %s", s.Status)
+	}
+}

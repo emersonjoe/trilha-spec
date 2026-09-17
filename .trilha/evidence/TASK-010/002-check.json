@@ -1,0 +1,13 @@
+{
+  "task": "TASK-010",
+  "seq": 2,
+  "kind": "check",
+  "at": "2026-09-17T21:43:26Z",
+  "by": "trilha-spec verify",
+  "command": "go test ./...",
+  "dir": "/Users/emersonoliveiradossantos/Projetos/github/trilha-spec",
+  "exit_code": 0,
+  "output": "ok  \tgithub.com/emersonjoe/trilha-spec/agent\t(cached)\nok  \tgithub.com/emersonjoe/trilha-spec/ai\t(cached)\nok  \tgithub.com/emersonjoe/trilha-spec/cmd/trilha-spec\t(cached)\nok  \tgithub.com/emersonjoe/trilha-spec/execution\t(cached)\nok  \tgithub.com/emersonjoe/trilha-spec/mcp\t(cached)\nok  \tgithub.com/emersonjoe/trilha-spec/spec\t(cached)\nok  \tgithub.com/emersonjoe/trilha-spec/task\t(cached)\n",
+  "output_sha256": "4d2692c9afa0bd70b61d4358b5a89bc49b82f8176dfe4fc1c5076be1b15358e7",
+  "passed": true
+}

@@ -208,6 +208,44 @@ func TestBodyAndTemplates(t *testing.T) {
 	}
 }
 
+// A spec has a life of its own: it is judged, delivered, replaced; the CLI
+// moves it and relates it without an editor.
+func TestSpecLifecycleCLI(t *testing.T) {
+	dir := t.TempDir()
+	must(t, dir, "init", "--name", "demo")
+	must(t, dir, "spec", "new", "First")
+	must(t, dir, "spec", "new", "Second")
+	if out, err := cli(t, dir, "spec", "move", "001-first", "done"); err == nil || !strings.Contains(out, "cannot move from draft to done") {
+		t.Fatalf("illegal move:\n%s", out)
+	}
+	if out := must(t, dir, "spec", "move", "001-first", "approved"); !strings.Contains(out, "001-first is now approved") {
+		t.Fatalf("move:\n%s", out)
+	}
+	if out := must(t, dir, "spec", "list", "--status", "approved"); !strings.Contains(out, "001-first") || strings.Contains(out, "002-second") {
+		t.Fatalf("list --status:\n%s", out)
+	}
+	if out, err := cli(t, dir, "spec", "set", "002-second", "--supersedes", "009-nope"); err == nil || !strings.Contains(out, "spec reference does not exist: 002-second supersedes 009-nope") {
+		t.Fatalf("missing reference accepted:\n%s", out)
+	}
+	must(t, dir, "spec", "set", "002-second", "--issue", "42", "--supersedes", "001-first")
+	if out := must(t, dir, "spec", "show", "002-second"); !strings.Contains(out, "issue: 42\n") || !strings.Contains(out, "supersedes:\n  - 001-first\n") {
+		t.Fatalf("set:\n%s", out)
+	}
+	must(t, dir, "spec", "move", "001-first", "superseded")
+	must(t, dir, "doctor")
+	// Drop the relation: the superseded spec is now an orphan and doctor says so.
+	must(t, dir, "spec", "set", "002-second", "--issue", "-")
+	if out := must(t, dir, "spec", "show", "002-second", "--json"); strings.Contains(out, `"issue"`) || !strings.Contains(out, `"supersedes"`) {
+		t.Fatalf("issue not cleared:\n%s", out)
+	}
+	p := filepath.Join(dir, ".trilha", "specs", "002-second.md")
+	b, _ := os.ReadFile(p)
+	os.WriteFile(p, []byte(strings.Replace(string(b), "supersedes:\n  - 001-first\n", "", 1)), 0o644)
+	if out, err := cli(t, dir, "doctor"); err == nil || !strings.Contains(out, "001-first is superseded but no spec names it") {
+		t.Fatalf("doctor:\n%s", out)
+	}
+}
+
 func TestUsage(t *testing.T) {
 	if out, err := cli(t, t.TempDir()); err == nil || !strings.Contains(out, "usage:") {
 		t.Fatalf("no args:\n%s", out)

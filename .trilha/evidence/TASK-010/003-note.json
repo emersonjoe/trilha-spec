@@ -1,0 +1,10 @@
+{
+  "task": "TASK-010",
+  "seq": 3,
+  "kind": "note",
+  "at": "2026-09-17T21:43:26Z",
+  "by": "claude-opus-5",
+  "exit_code": 0,
+  "passed": true,
+  "note": "spec status rejected/superseded, supersedes/depends_on, spec move|set|list --status, MCP trilha_list_specs/trilha_spec_move, protocol §11 (en, pt-BR), README and hands-on chapter updated"
+}

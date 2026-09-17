@@ -17,11 +17,14 @@ func TestStdioRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	st := &task.Store{Layout: l}
+	if err := l.SaveSpec(spec.NewSpecDoc("001-one", "One", "en", "")); err != nil {
+		t.Fatal(err)
+	}
 	tk, _ := st.Create("One", func(x *task.Task) { x.Acceptance = []string{"ok"} })
 	st.Move(tk.ID, task.Ready)
 
 	ro := NewServer("trilha-spec", "test", Tools(l, false)...)
-	if n := len(ro.Tools()); n != 5 {
+	if n := len(ro.Tools()); n != 6 {
 		t.Fatalf("read-only tools = %d", n)
 	}
 	rw := NewServer("trilha-spec", "test", Tools(l, true)...)
@@ -35,13 +38,15 @@ func TestStdioRoundTrip(t *testing.T) {
 		`{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"trilha_context","arguments":{"id":"TASK-001"}}}`,
 		`{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"nope"}}`,
 		`not json`,
+		`{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"trilha_list_specs","arguments":{"status":"draft"}}}`,
+		`{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"trilha_spec_move","arguments":{"id":"001-one","status":"approved"}}}`,
 	}, "\n") + "\n"
 	var out bytes.Buffer
 	if err := rw.ServeStdio(context.Background(), strings.NewReader(in), &out); err != nil {
 		t.Fatal(err)
 	}
 	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
-	if len(lines) != 8 {
+	if len(lines) != 10 {
 		t.Fatalf("%d replies:\n%s", len(lines), out.String())
 	}
 	var resp struct {
@@ -76,5 +81,13 @@ func TestStdioRoundTrip(t *testing.T) {
 	json.Unmarshal([]byte(lines[7]), &resp)
 	if resp.Error == nil || resp.Error.Code != codeParse {
 		t.Fatalf("parse error: %s", lines[7])
+	}
+	json.Unmarshal([]byte(lines[8]), &resp)
+	if !strings.Contains(string(resp.Result), `001-one`) {
+		t.Fatalf("list specs: %s", lines[8])
+	}
+	json.Unmarshal([]byte(lines[9]), &resp)
+	if !strings.Contains(string(resp.Result), `001-one is now approved`) {
+		t.Fatalf("spec move: %s", lines[9])
 	}
 }

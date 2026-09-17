@@ -13,7 +13,7 @@ protocolo.
 ├── .gitignore        runs/ e o cache de build do framework; o resto é commitado
 ├── project.md        Documento: name, description, default_agent, verify[]
 ├── constitution.md   Markdown livre
-├── specs/NNN-nome.md Documento: id, title, status (draft|approved|done), issue
+├── specs/NNN-nome.md Documento: ver §11
 ├── tasks/TASK-NNN.md Documento: ver §3
 ├── agents/nome.md    Documento: name, role, driver, command, model, tools[], constraints[]
 ├── context/*.md      Markdown livre; todo arquivo vai para o agente
@@ -143,9 +143,11 @@ network}, `constraints[]`. O protocolo carrega o manifesto; fazê-lo valer é pa
 | `trilha_next` | | |
 | `trilha_context` | | `id`, `format?` (markdown \| json) |
 | `trilha_graph` | | |
+| `trilha_list_specs` | | `status?` |
 | `trilha_move` | sim | `id`, `status` |
 | `trilha_evidence` | sim | `id`, `kind` (note \| artifact), `note?`, `files?`, `by?` |
 | `trilha_verify` | sim | `id`, `by?` |
+| `trilha_spec_move` | sim | `id`, `status` (§11) |
 
 Ferramentas de escrita só aparecem com `--write`; ferramenta não listada não pode ser chamada.
 
@@ -161,3 +163,31 @@ O transporte de Runs entre control planes e runners usa `trilha.execution/v1`. O
 normativo está em `contracts/execution/v1/schema.json`; `execution/testdata/run-v1.json` é o
 fixture canônico de compatibilidade. Uma Run é uma execução lógica de uma Task e pode conter
 várias Attempts. A linhagem de correção usa `retry_of` com ID de Run, nunca ID de Task.
+
+## 11. Especificação
+
+| Campo | Obrigatório | Significado |
+|---|---|---|
+| `id` | sim | `NNN-nome`, igual ao nome do arquivo; a numeração de branch do spec-kit |
+| `title` | sim | uma linha |
+| `status` | sim | abaixo; ausente significa `draft` |
+| `issue` | não | a issue que é a fonte do escopo |
+| `supersedes` | não | IDs de spec que esta substitui; todos precisam existir |
+| `depends_on` | não | IDs de spec em que esta se apoia; todos precisam existir |
+
+O corpo é a especificação: por quê, o que muda, fora de escopo, aceitação. `draft` está sendo
+escrita; `approved` foi acordada e pode virar tasks; `done` tem toda task entregue; `rejected`
+foi julgada e recusada; `superseded` foi substituída por uma spec que a cita em `supersedes`.
+
+| De | Para |
+|---|---|
+| draft | approved, rejected, superseded |
+| approved | done, rejected, superseded, draft |
+| done | superseded |
+| rejected | draft |
+| superseded | — |
+
+Regras que um escritor faz valer: uma spec nunca referencia a si mesma; toda referência existe
+(`doctor` aponta a que não existe); uma spec `superseded` é citada em `supersedes` de pelo menos
+uma outra spec, ou `doctor` a aponta como órfã. Estado de task nunca move uma spec: isso é uma
+decisão.

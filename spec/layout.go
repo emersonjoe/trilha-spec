@@ -179,6 +179,10 @@ func (p Problem) String() string {
 		return fmt.Sprintf("missing %s (run `trilha-spec init`)", p.Arg)
 	case ProblemGitignoreAll:
 		return ".trilha/.gitignore ignores everything (`*`): specs, tasks and evidence will not be committed; run `trilha-spec init` to rewrite it"
+	case ProblemSpecRefMissing:
+		return "spec reference does not exist: " + p.Arg
+	case ProblemSpecNoSuccessor:
+		return "spec " + p.Arg + " is superseded but no spec names it in `supersedes`"
 	}
 	return p.Code + " " + p.Arg
 }

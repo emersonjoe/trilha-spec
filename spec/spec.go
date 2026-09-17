@@ -10,16 +10,67 @@ import (
 	"strings"
 )
 
+// Status is where a specification is in its life. Unlike a task, a spec has
+// no execution: it is written, judged, delivered, and it may be replaced.
+type Status string
+
+const (
+	Draft      Status = "draft"      // being written
+	Approved   Status = "approved"   // agreed; tasks may be cut from it
+	Done       Status = "done"       // every task delivered
+	Rejected   Status = "rejected"   // judged and refused; may return to draft
+	Superseded Status = "superseded" // replaced by a spec that names it in `supersedes`
+)
+
+// Statuses lists every spec status in life order.
+var Statuses = []Status{Draft, Approved, Done, Rejected, Superseded}
+
+// Transitions says which spec moves are legal. Superseded is final: the
+// successor carries the work on.
+var Transitions = map[Status][]Status{
+	Draft:      {Approved, Rejected, Superseded},
+	Approved:   {Done, Rejected, Superseded, Draft},
+	Done:       {Superseded},
+	Rejected:   {Draft},
+	Superseded: {},
+}
+
+// Valid answers whether s is one of the protocol's spec statuses.
+func (s Status) Valid() bool {
+	for _, t := range Statuses {
+		if t == s {
+			return true
+		}
+	}
+	return false
+}
+
+// CanMoveTo answers whether the transition s → to is legal.
+func (s Status) CanMoveTo(to Status) bool {
+	for _, t := range Transitions[s] {
+		if t == to {
+			return true
+		}
+	}
+	return false
+}
+
 // Spec is a specification: what to build and why, before it is cut into
 // tasks. Its ID is `NNN-name`, the same numbering spec-kit uses for a
 // feature branch, so the two can point at each other.
 type Spec struct {
 	ID     string `json:"id"`
 	Title  string `json:"title"`
-	Status string `json:"status"` // draft | approved | done
+	Status Status `json:"status"`
 	Issue  string `json:"issue,omitempty"`
-	Body   string `json:"body,omitempty"`
-	Fields Fields `json:"-"`
+	// Supersedes names the specs this one replaces; each of them is
+	// `superseded`, and a `superseded` spec is named by exactly this field of
+	// its successor.
+	Supersedes []string `json:"supersedes,omitempty"`
+	// DependsOn names the specs this one builds on.
+	DependsOn []string `json:"depends_on,omitempty"`
+	Body      string   `json:"body,omitempty"`
+	Fields    Fields   `json:"-"`
 }
 
 var reSpecID = regexp.MustCompile(`^[0-9]{3}-[a-z0-9]+(-[a-z0-9]+)*$`)
@@ -34,20 +85,23 @@ func ParseSpec(src []byte) (*Spec, error) {
 		return nil, err
 	}
 	s := &Spec{
-		ID:     d.Fields.Get("id"),
-		Title:  d.Fields.Get("title"),
-		Status: d.Fields.Get("status"),
-		Issue:  d.Fields.Get("issue"),
-		Body:   d.Body,
-		Fields: d.Fields,
+		ID:         d.Fields.Get("id"),
+		Title:      d.Fields.Get("title"),
+		Status:     Status(d.Fields.Get("status")),
+		Issue:      d.Fields.Get("issue"),
+		Supersedes: d.Fields.GetList("supersedes"),
+		DependsOn:  d.Fields.GetList("depends_on"),
+		Body:       d.Body,
+		Fields:     d.Fields,
 	}
 	if s.Status == "" {
-		s.Status = "draft"
+		s.Status = Draft
 	}
 	return s, s.Validate()
 }
 
-// Validate checks the fields a reader relies on.
+// Validate checks the fields a reader relies on. References to other specs
+// are checked for shape here and for existence by Layout.CheckSpecs.
 func (s *Spec) Validate() error {
 	var errs []string
 	if !ValidSpecID(s.ID) {
@@ -56,15 +110,36 @@ func (s *Spec) Validate() error {
 	if strings.TrimSpace(s.Title) == "" {
 		errs = append(errs, "title is required")
 	}
-	switch s.Status {
-	case "draft", "approved", "done":
-	default:
-		errs = append(errs, fmt.Sprintf("status %q must be draft, approved or done", s.Status))
+	if !s.Status.Valid() {
+		errs = append(errs, fmt.Sprintf("status %q is not one of %v", s.Status, Statuses))
 	}
+	for field, refs := range map[string][]string{"supersedes": s.Supersedes, "depends_on": s.DependsOn} {
+		for _, r := range refs {
+			if !ValidSpecID(r) {
+				errs = append(errs, fmt.Sprintf("%s %q is not a spec id", field, r))
+			}
+			if r == s.ID {
+				errs = append(errs, "a spec cannot reference itself in "+field)
+			}
+		}
+	}
+	sort.Strings(errs)
 	if len(errs) > 0 {
 		return errors.New("spec " + s.ID + ": " + strings.Join(errs, "; "))
 	}
 	return nil
+}
+
+// Move applies a transition, or answers why it cannot.
+func (s *Spec) Move(to Status) error {
+	if !to.Valid() {
+		return fmt.Errorf("spec %s: %q is not a status", s.ID, to)
+	}
+	if !s.Status.CanMoveTo(to) {
+		return fmt.Errorf("spec %s: cannot move from %s to %s (allowed: %v)", s.ID, s.Status, to, Transitions[s.Status])
+	}
+	s.Status = to
+	return s.Validate()
 }
 
 // Bytes writes the specification back.
@@ -72,13 +147,73 @@ func (s *Spec) Bytes() []byte {
 	d := &Doc{Fields: s.Fields, Body: s.Body}
 	d.Fields.Set("id", s.ID)
 	d.Fields.Set("title", s.Title)
-	d.Fields.Set("status", s.Status)
+	d.Fields.Set("status", string(s.Status))
 	if s.Issue != "" {
 		d.Fields.Set("issue", s.Issue)
 	} else {
 		d.Fields.Delete("issue")
 	}
+	for k, v := range map[string][]string{"supersedes": s.Supersedes, "depends_on": s.DependsOn} {
+		if len(v) > 0 {
+			d.Fields.SetList(k, v)
+		} else {
+			d.Fields.Delete(k)
+		}
+	}
 	return d.Bytes()
+}
+
+// MoveSpec loads a spec, applies a transition and saves it.
+func (l Layout) MoveSpec(id string, to Status) (*Spec, error) {
+	s, err := l.LoadSpec(id)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.Move(to); err != nil {
+		return nil, err
+	}
+	return s, l.SaveSpec(s)
+}
+
+// Spec problem codes, for Doctor.
+const (
+	// ProblemSpecRefMissing: Arg is "ID field REF".
+	ProblemSpecRefMissing = "spec-ref-missing"
+	// ProblemSpecNoSuccessor: a superseded spec no other spec supersedes.
+	ProblemSpecNoSuccessor = "spec-no-successor"
+)
+
+// CheckSpecs answers what is wrong across specs: a reference to a spec that
+// does not exist, or a superseded spec that no successor names.
+func (l Layout) CheckSpecs(specs []*Spec) []Problem {
+	byID := map[string]*Spec{}
+	for _, s := range specs {
+		byID[s.ID] = s
+	}
+	successor := map[string]bool{}
+	var problems []Problem
+	for _, s := range specs {
+		for _, field := range []string{"supersedes", "depends_on"} {
+			refs := s.DependsOn
+			if field == "supersedes" {
+				refs = s.Supersedes
+			}
+			for _, r := range refs {
+				if _, ok := byID[r]; !ok {
+					problems = append(problems, Problem{ProblemSpecRefMissing, s.ID + " " + field + " " + r})
+				}
+				if field == "supersedes" {
+					successor[r] = true
+				}
+			}
+		}
+	}
+	for _, s := range specs {
+		if s.Status == Superseded && !successor[s.ID] {
+			problems = append(problems, Problem{ProblemSpecNoSuccessor, s.ID})
+		}
+	}
+	return problems
 }
 
 // LoadSpec reads one specification by ID.
@@ -180,7 +315,7 @@ var accents = map[rune]rune{
 // in the language of Templates(lang). A body, when given, replaces the
 // template.
 func NewSpecDoc(id, title, lang, body string) *Spec {
-	s := &Spec{ID: id, Title: title, Status: "draft"}
+	s := &Spec{ID: id, Title: title, Status: Draft}
 	if body == "" {
 		body = fmt.Sprintf(Templates(lang).SpecBody, title)
 	}

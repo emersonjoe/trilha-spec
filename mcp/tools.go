@@ -85,6 +85,27 @@ func Tools(l spec.Layout, write bool) []*Tool {
 			},
 		},
 		{
+			Name:        "trilha_list_specs",
+			Description: "List every specification with id, title, status, issue and relations. Filter by status with {\"status\": \"approved\"}.",
+			Schema:      json.RawMessage(`{"type":"object","properties":{"status":{"type":"string"}}}`),
+			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+				var in struct{ Status string }
+				json.Unmarshal(args, &in)
+				specs, err := l.ListSpecs()
+				if err != nil {
+					return "", err
+				}
+				out := []map[string]any{}
+				for _, s := range specs {
+					if in.Status != "" && string(s.Status) != in.Status {
+						continue
+					}
+					out = append(out, map[string]any{"id": s.ID, "title": s.Title, "status": s.Status, "issue": s.Issue, "supersedes": s.Supersedes, "depends_on": s.DependsOn})
+				}
+				return js(out), nil
+			},
+		},
+		{
 			Name:        "trilha_graph",
 			Description: "The dependency graph as Mermaid.",
 			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
@@ -112,6 +133,20 @@ func Tools(l spec.Layout, write bool) []*Tool {
 					return "", err
 				}
 				return fmt.Sprintf("%s is now %s", t.ID, t.Status), nil
+			},
+		},
+		&Tool{
+			Name:        "trilha_spec_move",
+			Description: "Move a specification to a status (draft, approved, done, rejected, superseded). Only legal transitions are accepted.",
+			Schema:      json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"},"status":{"type":"string"}},"required":["id","status"]}`),
+			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+				var in struct{ ID, Status string }
+				json.Unmarshal(args, &in)
+				s, err := l.MoveSpec(in.ID, spec.Status(in.Status))
+				if err != nil {
+					return "", err
+				}
+				return fmt.Sprintf("%s is now %s", s.ID, s.Status), nil
 			},
 		},
 		&Tool{

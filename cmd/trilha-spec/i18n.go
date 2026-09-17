@@ -48,6 +48,10 @@ func doctorMessage(p spec.Problem) string {
 		return fmt.Sprintf(T("missing %s (run `trilha-spec init`)"), p.Arg)
 	case spec.ProblemGitignoreAll:
 		return T(".trilha/.gitignore ignores everything (`*`): specs, tasks and evidence will not be committed; run `trilha-spec init` to rewrite it")
+	case spec.ProblemSpecRefMissing:
+		return fmt.Sprintf(T("spec reference does not exist: %s"), p.Arg)
+	case spec.ProblemSpecNoSuccessor:
+		return fmt.Sprintf(T("spec %s is superseded but no spec names it in `supersedes`"), p.Arg)
 	}
 	return p.String()
 }
@@ -57,7 +61,8 @@ const usagePT = `trilha-spec ` + version + ` — o protocolo aberto para trabalh
 uso: trilha-spec <comando> [flags]
 
   init [dir]                    cria .trilha/ (projeto, constituição, agentes)
-  spec new <título> [--issue N] [--body TEXTO | --body-file CAMINHO] | list | show <id>
+  spec new <título> [--issue N] [--body TEXTO | --body-file CAMINHO]
+  spec list [--status S] | show <id> | move <id> <status> | set <id> [--issue N] [--supersedes A,B] [--depends A,B]
   task add <título> [--spec ID] [--depends A,B] [--agent N] [--status S] [--accept C]... [--check CMD]...
            [--body TEXTO | --body-file CAMINHO]   (CAMINHO "-" lê stdin)
   task list [--status S] | show <id> | next | move <id> <status> | graph [--dot]
@@ -69,7 +74,8 @@ uso: trilha-spec <comando> [flags]
   doctor                        o que um leitor tropeçaria
   version
 
-Toda listagem aceita --json. Status: idea spec ready running verify review done blocked failed.
+Toda listagem aceita --json. Status de task: idea spec ready running verify review done blocked failed.
+Status de spec: draft approved done rejected superseded.
 TRILHA_LANG=pt traduz as mensagens e os templates que init e spec new escrevem; formatos de arquivo e --json não mudam.
 `
 
@@ -84,12 +90,15 @@ var pt = map[string]string{
 	"  created %s\n": "  criado %s\n",
 	"next: describe the project in .trilha/project.md, then `trilha-spec spec new \"<title>\"`\n": "próximo passo: descreva o projeto em .trilha/project.md e depois `trilha-spec spec new \"<título>\"`\n",
 	// spec
-	"usage: trilha-spec spec new <title> | list | show <id>": "uso: trilha-spec spec new <título> | list | show <id>",
-	"usage: trilha-spec spec new <title>":                    "uso: trilha-spec spec new <título>",
-	"usage: trilha-spec spec show <id>":                      "uso: trilha-spec spec show <id>",
-	"created %s (%s)\n":                                      "criado %s (%s)\n",
-	"unknown spec command %q":                                "subcomando de spec desconhecido %q",
-	"--body and --body-file are exclusive":                   "--body e --body-file são exclusivos",
+	"usage: trilha-spec spec new <title> | list | show <id> | move <id> <status> | set <id> [flags]": "uso: trilha-spec spec new <título> | list | show <id> | move <id> <status> | set <id> [flags]",
+	"usage: trilha-spec spec move <id> <status>":                                                     "uso: trilha-spec spec move <id> <status>",
+	"usage: trilha-spec spec set <id> [--issue N] [--supersedes A,B] [--depends A,B]":                "uso: trilha-spec spec set <id> [--issue N] [--supersedes A,B] [--depends A,B]",
+	"updated %s\n":                         "atualizado %s\n",
+	"usage: trilha-spec spec new <title>":  "uso: trilha-spec spec new <título>",
+	"usage: trilha-spec spec show <id>":    "uso: trilha-spec spec show <id>",
+	"created %s (%s)\n":                    "criado %s (%s)\n",
+	"unknown spec command %q":              "subcomando de spec desconhecido %q",
+	"--body and --body-file are exclusive": "--body e --body-file são exclusivos",
 	// task
 	"usage: trilha-spec task add|list|show|next|move|graph": "uso: trilha-spec task add|list|show|next|move|graph",
 	"usage: trilha-spec task add <title> [flags]":           "uso: trilha-spec task add <título> [flags]",
@@ -120,7 +129,9 @@ var pt = map[string]string{
 	// doctor
 	"✓ %s is healthy\n": "✓ %s está saudável\n",
 	"%d problem(s)":     "%d problema(s)",
-	"missing directory %s (run `trilha-spec init`)": "falta o diretório %s (rode `trilha-spec init`)",
-	"missing %s (run `trilha-spec init`)":           "falta %s (rode `trilha-spec init`)",
+	"missing directory %s (run `trilha-spec init`)":              "falta o diretório %s (rode `trilha-spec init`)",
+	"missing %s (run `trilha-spec init`)":                        "falta %s (rode `trilha-spec init`)",
+	"spec reference does not exist: %s":                          "referência a spec inexistente: %s",
+	"spec %s is superseded but no spec names it in `supersedes`": "a spec %s está superseded mas nenhuma spec a cita em `supersedes`",
 	".trilha/.gitignore ignores everything (`*`): specs, tasks and evidence will not be committed; run `trilha-spec init` to rewrite it": ".trilha/.gitignore ignora tudo (`*`): specs, tasks e evidência não serão commitadas; rode `trilha-spec init` para reescrevê-lo",
 }

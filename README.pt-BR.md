@@ -66,6 +66,7 @@ go install github.com/emersonjoe/trilha-spec/cmd/trilha-spec@latest
 
 trilha-spec init --name meu-app
 trilha-spec spec new "Login OAuth"
+trilha-spec spec move 001-login-oauth approved  # draft → approved → done; rejected, superseded
 trilha-spec task add "Config do provedor" --spec 001-login-oauth --status ready \
     --accept "config carrega" --check "go test ./internal/oauth/..." \
     --body "Lê config.yaml; falha alto quando falta chave."   # ou --body-file CAMINHO (- lê stdin)
@@ -87,8 +88,9 @@ mudam, porque nomes de status, de campo e IDs são o protocolo.
 ### MCP
 
 `trilha-spec mcp` serve o protocolo por stdio a qualquer host MCP. Só leitura por padrão
-(`trilha_list_tasks`, `trilha_get_task`, `trilha_next`, `trilha_context`, `trilha_graph`);
-`--write` acrescenta `trilha_move`, `trilha_evidence` e `trilha_verify`. Ferramenta não
+(`trilha_list_tasks`, `trilha_get_task`, `trilha_next`, `trilha_context`, `trilha_list_specs`,
+`trilha_graph`); `--write` acrescenta `trilha_move`, `trilha_spec_move`, `trilha_evidence` e
+`trilha_verify`. Ferramenta não
 oferecida não pode ser chamada.
 
 ## Pacotes

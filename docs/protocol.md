@@ -13,7 +13,7 @@ speaks the protocol.
 ├── .gitignore        runs/ and the framework's build cache; everything else is committed
 ├── project.md        Document: name, description, default_agent, verify[]
 ├── constitution.md   Markdown, free form
-├── specs/NNN-name.md Document: id, title, status (draft|approved|done), issue
+├── specs/NNN-name.md Document: see §11
 ├── tasks/TASK-NNN.md Document: see §3
 ├── agents/name.md    Document: name, role, driver, command, model, tools[], constraints[]
 ├── context/*.md      Markdown, free form; every file is handed to the agent
@@ -142,10 +142,12 @@ capability `tools` only.
 | `trilha_get_task` | | `id` |
 | `trilha_next` | | |
 | `trilha_context` | | `id`, `format?` (markdown \| json) |
+| `trilha_list_specs` | | `status?` |
 | `trilha_graph` | | |
 | `trilha_move` | yes | `id`, `status` |
 | `trilha_evidence` | yes | `id`, `kind` (note \| artifact), `note?`, `files?`, `by?` |
 | `trilha_verify` | yes | `id`, `by?` |
+| `trilha_spec_move` | yes | `id`, `status` (§11) |
 
 Write tools are only listed with `--write`; a tool not listed cannot be called.
 
@@ -161,3 +163,31 @@ Run transport between control planes and runners uses `trilha.execution/v1`. Its
 JSON Schema is `contracts/execution/v1/schema.json`; `execution/testdata/run-v1.json` is the
 canonical compatibility fixture. A Run is one logical execution of a Task and may contain
 multiple Attempts. Repair lineage uses `retry_of` with a Run ID, never a Task ID.
+
+## 11. Specification
+
+| Field | Required | Meaning |
+|---|---|---|
+| `id` | yes | `NNN-name`, equal to the file name; the spec-kit branch numbering |
+| `title` | yes | one line |
+| `status` | yes | below; missing means `draft` |
+| `issue` | no | the issue that is the source of the scope |
+| `supersedes` | no | spec IDs this one replaces; every one must exist |
+| `depends_on` | no | spec IDs this one builds on; every one must exist |
+
+The body is the specification: why, what changes, out of scope, acceptance. A `draft` is being
+written; `approved` is agreed and tasks may be cut from it; `done` has every task delivered;
+`rejected` was judged and refused; `superseded` was replaced by a spec that names it in
+`supersedes`.
+
+| From | To |
+|---|---|
+| draft | approved, rejected, superseded |
+| approved | done, rejected, superseded, draft |
+| done | superseded |
+| rejected | draft |
+| superseded | — |
+
+Rules a writer enforces: a spec never references itself; every reference exists (`doctor`
+reports one that does not); a `superseded` spec is named in `supersedes` of at least one other
+spec, or `doctor` reports it as an orphan. Task states never move a spec: that is a decision.
