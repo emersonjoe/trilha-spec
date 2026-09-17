@@ -1,0 +1,15 @@
+{
+  "task": "TASK-008",
+  "seq": 3,
+  "kind": "note",
+  "at": "2026-09-17T22:04:17Z",
+  "by": "claude-opus-5",
+  "exit_code": 0,
+  "passed": true,
+  "note": "Ed25519 signature on evidence records; keygen, --sign-key, --verify; trilha_list_evidence; verdicts in the context pack; protocol §1/§5/§8, README and chapter in both locales.",
+  "signature": {
+    "alg": "ed25519",
+    "key_id": "claude-opus-5",
+    "sig": "PH4eR9BhI9MZhwT7+qgE6iotJMFflXfFwH9gxWTy9TTeWP1VJnrRFUb5ZaVKiXculWVNT/utLI+ym2ZUxxbfDA=="
+  }
+}

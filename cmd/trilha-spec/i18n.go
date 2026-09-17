@@ -52,6 +52,8 @@ func doctorMessage(p spec.Problem) string {
 		return fmt.Sprintf(T("spec reference does not exist: %s"), p.Arg)
 	case spec.ProblemSpecNoSuccessor:
 		return fmt.Sprintf(T("spec %s is superseded but no spec names it in `supersedes`"), p.Arg)
+	case spec.ProblemPrivateKey:
+		return fmt.Sprintf(T("private key %s is inside .trilha; move it out (only `.pub` files belong in keys/)"), p.Arg)
 	case spec.ProblemSpecNoSecurity:
 		return fmt.Sprintf(T("spec %s is approved but declares no security impact (assets, trust_boundaries, controls, evidence)"), p.Arg)
 	}
@@ -73,7 +75,10 @@ uso: trilha-spec <comando> [flags]
   project show | pause [--reason R] | resume | limit <chave> <valor|->
   context <task-id>             o pacote de contexto que um agente recebe (--json para ferramentas)
   verify <task-id> [--dir D]    roda os checks da task e grava evidência
-  evidence <task-id> [add --note TEXTO | add --run --provider P --model M --tokens-in N --tokens-out N --cost C --currency USD]
+  evidence <task-id> [--verify] [--keys DIR]   registros; --verify confere assinaturas contra DIR (padrão .trilha/keys)
+  evidence <task-id> add --note TEXTO | add --run [--provider P --model M --tokens-in N --tokens-out N --cost C --currency USD]
+           [--sign-key ARQUIVO [--key-id ID]]   assina o registro com uma chave privada Ed25519
+  keygen <key-id> [--out DIR]   um par Ed25519: DIR/<key-id>.key (privada, padrão ~/.trilha/keys) e .trilha/keys/<key-id>.pub
   mcp [--write]                 serve o protocolo por MCP em stdio
   doctor                        o que um leitor tropeçaria
   version
@@ -135,10 +140,18 @@ var pt = map[string]string{
 	"usage: trilha-spec evidence <task-id> [add --note TEXT | add --run [--provider P] [--model M] [--tokens-in N] [--tokens-out N] [--cost C --currency USD] [--failed]]": "uso: trilha-spec evidence <task-id> [add --note TEXTO | add --run [--provider P] [--model M] [--tokens-in N] [--tokens-out N] [--cost C --currency USD] [--failed]]",
 	"evidence add needs --note, --file or --run": "evidence add precisa de --note, --file ou --run",
 	"recorded #%d (%s)\n":                        "gravado #%d (%s)\n",
+	"recorded #%d (%s), signed by %s\n":          "gravado #%d (%s), assinado por %s\n",
+	"--key-id needs --sign-key":                  "--key-id precisa de --sign-key",
+	"%d record(s), %d key(s) in %s\n":            "%d registro(s), %d chave(s) em %s\n",
+	"%d invalid signature(s)":                    "%d assinatura(s) inválida(s)",
+	"usage: trilha-spec keygen <key-id> [--out DIR]   (key-id: lowercase words joined by - or .)": "uso: trilha-spec keygen <key-id> [--out DIR]   (key-id: palavras minúsculas unidas por - ou .)",
+	"%s exists; pick another key id":                                               "%s existe; escolha outro key id",
+	"private key %s (keep it out of the repository)\npublic key  %s (commit it)\n": "chave privada %s (mantenha fora do repositório)\nchave pública %s (commite)\n",
 	// mcp (stderr)
 	"trilha-spec mcp %s · %s\ntools: %s\n":                                              "trilha-spec mcp %s · %s\nferramentas: %s\n",
 	"read-only; pass --write to offer trilha_move, trilha_evidence and trilha_verify\n": "somente leitura; passe --write para oferecer trilha_move, trilha_evidence e trilha_verify\n",
 	// doctor
+	"private key %s is inside .trilha; move it out (only `.pub` files belong in keys/)": "a chave privada %s está dentro de .trilha; tire-a de lá (só arquivos `.pub` pertencem a keys/)",
 	"✓ %s is healthy\n": "✓ %s está saudável\n",
 	"%d problem(s)":     "%d problema(s)",
 	"%d warning(s)\n":   "%d aviso(s)\n",

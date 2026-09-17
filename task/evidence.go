@@ -53,6 +53,10 @@ type Evidence struct {
 	// Currency is ISO 4217 (`USD`); required when Cost is set.
 	Currency string            `json:"currency,omitempty"`
 	Meta     map[string]string `json:"meta,omitempty"`
+	// Signature, when present, is the runner's proof that it wrote this
+	// record and nobody edited it: see sign.go. Unsigned records are valid
+	// protocol; signing is opt-in per runner.
+	Signature *Signature `json:"signature,omitempty"`
 }
 
 var reCurrency = regexp.MustCompile(`^[A-Z]{3}$`)
@@ -82,6 +86,13 @@ var CheckTimeout = 10 * time.Minute
 // the record as written and its path. The file name sorts in time:
 // 001-check.json, 002-note.json.
 func Record(l spec.Layout, e Evidence) (Evidence, string, error) {
+	return RecordSigned(l, e, nil)
+}
+
+// RecordSigned is Record with a signature: the signer signs the record as it
+// will be written — sequence, time and hashes filled in — so what is on disk
+// is exactly what was signed. A nil signer records unsigned.
+func RecordSigned(l spec.Layout, e Evidence, signer *Signer) (Evidence, string, error) {
 	if !ValidID(e.Task) {
 		return e, "", fmt.Errorf("evidence: %q is not a task id", e.Task)
 	}
@@ -108,6 +119,12 @@ func Record(l spec.Layout, e Evidence) (Evidence, string, error) {
 	}
 	if len(e.Output) > MaxOutput {
 		e.Output = e.Output[:MaxOutput] + "\n[truncated]"
+	}
+	e.Signature = nil
+	if signer != nil {
+		if err := signer.Sign(&e); err != nil {
+			return e, "", err
+		}
 	}
 	b, err := json.MarshalIndent(e, "", "  ")
 	if err != nil {

@@ -71,6 +71,24 @@ func Tools(l spec.Layout, write bool) []*Tool {
 			},
 		},
 		{
+			Name:        "trilha_list_evidence",
+			Description: "List the evidence of a task with a verdict per record — unsigned, valid or invalid — checked against the public keys in .trilha/keys.",
+			Schema:      json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"}},"required":["id"]}`),
+			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+				var in struct{ ID string }
+				json.Unmarshal(args, &in)
+				list, err := task.ListEvidence(l, in.ID)
+				if err != nil {
+					return "", err
+				}
+				keys, err := task.ProjectKeys(l)
+				if err != nil {
+					return "", err
+				}
+				return js(keys.CheckAll(list)), nil
+			},
+		},
+		{
 			Name:        "trilha_context",
 			Description: "Build the context pack of a task — project, constitution, spec, task, dependencies, evidence, agent — as Markdown (default) or JSON.",
 			Schema:      json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"},"format":{"type":"string","enum":["markdown","json"]}},"required":["id"]}`),

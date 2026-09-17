@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -43,7 +44,10 @@ usage: trilha-spec <command> [flags]
   project show | pause [--reason R] | resume | limit <key> <value|->
   context <task-id>             the context pack an agent receives (--json for tools)
   verify <task-id> [--dir D]    run the task's checks and record evidence
-  evidence <task-id> [add --note TEXT | add --run --provider P --model M --tokens-in N --tokens-out N --cost C --currency USD]
+  evidence <task-id> [--verify] [--keys DIR]   records; --verify checks signatures against DIR (default .trilha/keys)
+  evidence <task-id> add --note TEXT | add --run [--provider P --model M --tokens-in N --tokens-out N --cost C --currency USD]
+           [--sign-key FILE [--key-id ID]]   sign the record with an Ed25519 private key
+  keygen <key-id> [--out DIR]   an Ed25519 pair: DIR/<key-id>.key (private, default ~/.trilha/keys) and .trilha/keys/<key-id>.pub
   mcp [--write]                 serve the protocol over MCP on stdio
   doctor                        what a reader would trip on
   version
@@ -85,6 +89,8 @@ func run(cmd string, args []string, out io.Writer) error {
 		return cmdEvidence(args, out)
 	case "mcp":
 		return cmdMCP(args)
+	case "keygen":
+		return cmdKeygen(args, out)
 	case "doctor":
 		return cmdDoctor(args, out)
 	case "version", "-v", "--version":
@@ -613,7 +619,13 @@ func cmdEvidence(args []string, out io.Writer) error {
 		cost := fs.Float64("cost", 0, "cost as observed (run)")
 		currency := fs.String("currency", "", "ISO 4217 code of --cost (run)")
 		failed := fs.Bool("failed", false, "the run did not pass")
+		signKey := fs.String("sign-key", "", "PEM Ed25519 private key to sign the record with")
+		keyID := fs.String("key-id", "", "key id of --sign-key (default: its file name)")
 		if err := fs.Parse(args[2:]); err != nil {
+			return err
+		}
+		signer, err := loadSigner(*signKey, *keyID)
+		if err != nil {
 			return err
 		}
 		if *note == "" && len(files) == 0 && !*run {
@@ -626,22 +638,31 @@ func cmdEvidence(args []string, out io.Writer) error {
 		case len(files) > 0:
 			kind = "artifact"
 		}
-		e, p, err := task.Record(st.Layout, task.Evidence{Task: id, Kind: kind, Note: *note, Files: files, By: *by, Passed: !*failed,
-			Provider: *provider, Model: *model, TokensIn: *tokensIn, TokensOut: *tokensOut, Cost: *cost, Currency: *currency})
+		e, p, err := task.RecordSigned(st.Layout, task.Evidence{Task: id, Kind: kind, Note: *note, Files: files, By: *by, Passed: !*failed,
+			Provider: *provider, Model: *model, TokensIn: *tokensIn, TokensOut: *tokensOut, Cost: *cost, Currency: *currency}, signer)
 		if err != nil {
 			return err
+		}
+		if signer != nil {
+			fmt.Fprintf(out, T("recorded #%d (%s), signed by %s\n"), e.Seq, rel(st.Layout, p), signer.KeyID)
+			return nil
 		}
 		fmt.Fprintf(out, T("recorded #%d (%s)\n"), e.Seq, rel(st.Layout, p))
 		return nil
 	}
 	fs := flags("evidence")
 	asJSON := fs.Bool("json", false, "")
+	verify := fs.Bool("verify", false, "check every signature and report unsigned, valid and invalid")
+	keysDir := fs.String("keys", "", "directory of <key_id>.pub files (default .trilha/keys)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
 	list, err := task.ListEvidence(st.Layout, id)
 	if err != nil {
 		return err
+	}
+	if *verify {
+		return verifyEvidence(st.Layout, list, *keysDir, *asJSON, out)
 	}
 	if *asJSON {
 		if list == nil {
@@ -762,6 +783,123 @@ func cmdProject(args []string, out io.Writer) error {
 		return nil
 	}
 	return fmt.Errorf(T("unknown project command %q"), args[0])
+}
+
+// loadSigner reads the private key `evidence add --sign-key` names; "" is
+// no signer. The key id defaults to the file name without `.key`.
+func loadSigner(path, keyID string) (*task.Signer, error) {
+	if path == "" {
+		if keyID != "" {
+			return nil, errors.New(T("--key-id needs --sign-key"))
+		}
+		return nil, nil
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	priv, err := task.ParsePrivateKey(b)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	if keyID == "" {
+		keyID = strings.TrimSuffix(filepath.Base(path), ".key")
+	}
+	return &task.Signer{KeyID: keyID, Key: priv}, nil
+}
+
+// verifyEvidence prints every record with its verdict. The command fails
+// when any signature is invalid: an edited record is a finding, not a
+// listing. Unsigned records are reported, never failed — signing is opt-in.
+func verifyEvidence(l spec.Layout, list []task.Evidence, keysDir string, asJSON bool, out io.Writer) error {
+	if keysDir == "" {
+		keysDir = l.Keys()
+	}
+	keys, err := task.LoadKeys(keysDir)
+	if err != nil {
+		return err
+	}
+	checked := keys.CheckAll(list)
+	invalid := 0
+	for _, c := range checked {
+		if c.Verdict == task.Invalid {
+			invalid++
+		}
+	}
+	if asJSON {
+		if err := printJSON(out, checked); err != nil {
+			return err
+		}
+	} else {
+		for _, c := range checked {
+			mark := "✗"
+			if c.Passed {
+				mark = "✓"
+			}
+			verdict := string(c.Verdict)
+			if c.Signature != nil {
+				verdict += " " + c.Signature.KeyID
+			}
+			if c.Reason != "" {
+				verdict += " (" + c.Reason + ")"
+			}
+			fmt.Fprintf(out, "#%-3d %s %-8s %-20s %s\n", c.Seq, mark, c.Kind, c.By, verdict)
+		}
+		fmt.Fprintf(out, T("%d record(s), %d key(s) in %s\n"), len(checked), len(keys), rel(l, keysDir))
+	}
+	if invalid > 0 {
+		return fmt.Errorf(T("%d invalid signature(s)"), invalid)
+	}
+	return nil
+}
+
+func cmdKeygen(args []string, out io.Writer) error {
+	fs := flags("keygen")
+	outDir := fs.String("out", "", "where the private key goes (default ~/.trilha/keys)")
+	pos, err := parse(fs, args)
+	if err != nil {
+		return err
+	}
+	if len(pos) != 1 || !task.ValidKeyID(pos[0]) {
+		return errors.New(T("usage: trilha-spec keygen <key-id> [--out DIR]   (key-id: lowercase words joined by - or .)"))
+	}
+	id := pos[0]
+	st, err := store()
+	if err != nil {
+		return err
+	}
+	if *outDir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		*outDir = filepath.Join(home, ".trilha", "keys")
+	}
+	privPath := filepath.Join(*outDir, id+".key")
+	pubPath := filepath.Join(st.Layout.Keys(), id+".pub")
+	for _, p := range []string{privPath, pubPath} {
+		if _, err := os.Stat(p); err == nil {
+			return fmt.Errorf(T("%s exists; pick another key id"), p)
+		}
+	}
+	priv, pub, err := task.GenerateKey()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(*outDir, 0o700); err != nil {
+		return err
+	}
+	if err := os.WriteFile(privPath, priv, 0o600); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(st.Layout.Keys(), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(pubPath, pub, 0o644); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, T("private key %s (keep it out of the repository)\npublic key  %s (commit it)\n"), privPath, rel(st.Layout, pubPath))
+	return nil
 }
 
 // runSummary is a run's cost in one glance: `anthropic/claude-sonnet-5 12345+678 tokens 0.0421 USD`.

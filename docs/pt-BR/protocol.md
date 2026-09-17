@@ -10,7 +10,7 @@ protocolo.
 
 ```
 .trilha/
-├── .gitignore        runs/ e o cache de build do framework; o resto é commitado
+├── .gitignore        runs/, keys/*.key e o cache de build do framework; o resto é commitado
 ├── project.md        Documento: ver §12
 ├── constitution.md   Markdown livre
 ├── specs/NNN-nome.md Documento: ver §11
@@ -18,6 +18,7 @@ protocolo.
 ├── agents/nome.md    Documento: name, role, driver, command, model, tools[], constraints[]
 ├── context/*.md      Markdown livre; todo arquivo vai para o agente
 ├── evidence/TASK-NNN/NNN-kind.json   ver §5
+├── keys/<key_id>.pub chaves públicas Ed25519, PEM; ver §5 — chave privada nunca fica aqui
 └── runs/             opaco ao protocolo
 ```
 
@@ -124,6 +125,25 @@ runner observou; o protocolo não afirma que foi verificado — conciliar com a 
 provedor é assunto do control plane, e preço por modelo não está no protocolo. Uma Attempt
 do contrato de execução (§10) usa os mesmos nomes.
 
+Um registro pode ser **assinado**, para que o revisor distinga o que um runner atestou do que
+qualquer um poderia ter digitado. A assinatura é um campo, omitido quando o registro não é
+assinado:
+
+```json
+"signature": { "alg": "ed25519", "key_id": "runner-01", "sig": "<base64>" }
+```
+
+Os bytes assinados são a forma canônica do registro: o objeto JSON sem `signature`, chaves
+ordenadas, sem espaço insignificante, sem escape de HTML — a forma que qualquer biblioteca
+JSON reproduz a partir do arquivo. `alg` é só `ed25519`; `key_id` são palavras minúsculas
+unidas por `-` ou `.`; a chave pública fica em `keys/<key_id>.pub` em PEM (PKIX) e é
+commitada, enquanto a privada fica fora de `.trilha` (`doctor` acusa uma que esteja dentro).
+Um leitor confere cada registro e responde um de três vereditos: `unsigned` (sem assinatura —
+o registro é uma alegação), `valid` (a assinatura confere com o registro sob a chave nomeada)
+ou `invalid` (não confere, a chave é desconhecida ou o algoritmo não é `ed25519`). Assinar é
+opcional: registro não assinado continua sendo registro. Registro editado fica `invalid`, e
+esse é o ponto.
+
 `verify` roda os `checks` da task e depois `project.verify`, grava um `check` por comando, não
 para em falha, e responde *passou* só quando todo código de saída é 0. Task sem check nenhum
 falha a verificação com uma `note` dizendo isso.
@@ -154,6 +174,7 @@ network}, `constraints[]`. O protocolo carrega o manifesto; fazê-lo valer é pa
 | `trilha_context` | | `id`, `format?` (markdown \| json) |
 | `trilha_graph` | | |
 | `trilha_list_specs` | | `status?` |
+| `trilha_list_evidence` | | `id`; cada registro com seu `verdict` (e `reason` quando inválido) |
 | `trilha_move` | sim | `id`, `status` |
 | `trilha_evidence` | sim | `id`, `kind` (note \| artifact), `note?`, `files?`, `by?` |
 | `trilha_verify` | sim | `id`, `by?` |

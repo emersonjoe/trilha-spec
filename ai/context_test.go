@@ -47,7 +47,7 @@ func TestBuild(t *testing.T) {
 		t.Fatalf("pack = %+v", p)
 	}
 	md := p.Markdown()
-	for _, want := range []string{"# Task TASK-002 — Login", "### Limits\n\n- max_cost_per_hour: 5\n- max_repeated_failure_class: 3\n", "## Constitution", "## You are `coder`", "## Specification 001-oauth", "### Assets touched\n\n- session cookie", "### Controls affected\n\n- ASVS V4.1", "### Evidence the reviewer must see\n\n- `go test ./internal/auth/...`", "- OAuth login works", "- `go test ./...`", "TASK-001 — Base (idea)", "#1 note by me: started", "## Context: arch.md", "monolith"} {
+	for _, want := range []string{"# Task TASK-002 — Login", "### Limits\n\n- max_cost_per_hour: 5\n- max_repeated_failure_class: 3\n", "## Constitution", "## You are `coder`", "## Specification 001-oauth", "### Assets touched\n\n- session cookie", "### Controls affected\n\n- ASVS V4.1", "### Evidence the reviewer must see\n\n- `go test ./internal/auth/...`", "- OAuth login works", "- `go test ./...`", "TASK-001 — Base (idea)", "#1 note by me: started · unverified", "## Context: arch.md", "monolith"} {
 		if !strings.Contains(md, want) {
 			t.Fatalf("markdown lacks %q:\n%s", want, md)
 		}

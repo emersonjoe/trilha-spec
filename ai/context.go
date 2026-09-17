@@ -22,13 +22,15 @@ import (
 
 // Pack is everything an agent gets for one task.
 type Pack struct {
-	Project      *spec.Project   `json:"project"`
-	Constitution string          `json:"constitution,omitempty"`
-	Spec         *spec.Spec      `json:"spec,omitempty"`
-	Task         *task.Task      `json:"task"`
-	Dependencies []*task.Task    `json:"dependencies,omitempty"`
-	Evidence     []task.Evidence `json:"evidence,omitempty"`
-	Agent        *agent.Agent    `json:"agent,omitempty"`
+	Project      *spec.Project `json:"project"`
+	Constitution string        `json:"constitution,omitempty"`
+	Spec         *spec.Spec    `json:"spec,omitempty"`
+	Task         *task.Task    `json:"task"`
+	Dependencies []*task.Task  `json:"dependencies,omitempty"`
+	// Evidence carries a verdict per record, checked against .trilha/keys:
+	// the agent sees what is proven and what is only claimed.
+	Evidence []task.Checked `json:"evidence,omitempty"`
+	Agent    *agent.Agent   `json:"agent,omitempty"`
 	// Context is .trilha/context/*.md, by file name.
 	Context map[string]string `json:"context,omitempty"`
 }
@@ -58,8 +60,16 @@ func Build(l spec.Layout, id string) (*Pack, error) {
 			p.Dependencies = append(p.Dependencies, dep)
 		}
 	}
-	if p.Evidence, err = task.ListEvidence(l, id); err != nil {
+	evidence, err := task.ListEvidence(l, id)
+	if err != nil {
 		return nil, err
+	}
+	if len(evidence) > 0 {
+		keys, err := task.ProjectKeys(l)
+		if err != nil {
+			return nil, err
+		}
+		p.Evidence = keys.CheckAll(evidence)
 	}
 	name := t.Agent
 	if name == "" {
@@ -186,6 +196,14 @@ func (p *Pack) Markdown() string {
 				}
 			case e.Note != "":
 				b.WriteString(e.Note)
+			}
+			switch e.Verdict {
+			case task.Valid:
+				fmt.Fprintf(&b, " · signed by %s", e.Signature.KeyID)
+			case task.Invalid:
+				fmt.Fprintf(&b, " · SIGNATURE INVALID (%s)", e.Reason)
+			default:
+				b.WriteString(" · unverified")
 			}
 			b.WriteString("\n")
 		}

@@ -22,6 +22,7 @@ governance are trilha-cloud.
 ├── agents/           coder.md, reviewer.md — who may execute, with what
 ├── context/          extra documents an agent receives
 ├── evidence/         TASK-001/001-check.json — proof a task produced
+├── keys/             runner-01.pub — who may sign evidence; private keys never here
 └── runs/             runner scratch; never committed
 ```
 
@@ -84,6 +85,10 @@ trilha-spec task move TASK-001 running
 trilha-spec task move TASK-001 verify
 trilha-spec verify TASK-001                    # runs checks, records evidence, → review or failed
 trilha-spec evidence TASK-001
+trilha-spec keygen runner-01                   # private key in ~/.trilha/keys, public in .trilha/keys
+trilha-spec evidence TASK-001 add --run --by runner-01 --model claude-sonnet-5 \
+    --sign-key ~/.trilha/keys/runner-01.key    # Ed25519 signature on the record
+trilha-spec evidence TASK-001 --verify         # unsigned | valid | invalid, per record
 trilha-spec evidence TASK-001 add --run --provider anthropic --model claude-sonnet-5 \
     --tokens-in 12345 --tokens-out 678 --cost 0.0421 --currency USD   # what a runner declares
 trilha-spec task graph                         # Mermaid; --dot for Graphviz
@@ -99,7 +104,7 @@ not change, because status names, field names and IDs are the protocol.
 
 `trilha-spec mcp` serves the protocol over stdio to any MCP host. Read-only by default
 (`trilha_list_tasks`, `trilha_get_task`, `trilha_next`, `trilha_context`, `trilha_list_specs`,
-`trilha_graph`); `--write` adds `trilha_move`, `trilha_spec_move`, `trilha_evidence` and
+`trilha_list_evidence`, `trilha_graph`); `--write` adds `trilha_move`, `trilha_spec_move`, `trilha_evidence` and
 `trilha_verify`. A tool that is not offered
 cannot be called.
 

@@ -88,6 +88,10 @@ func (l Layout) AgentFile(name string) string { return filepath.Join(l.Agents(),
 // EvidenceDir is where one task's evidence goes.
 func (l Layout) EvidenceDir(id string) string { return filepath.Join(l.Evidence(), id) }
 
+// Keys is .trilha/keys: the public keys evidence signatures are checked
+// against, one `<key_id>.pub` per key. Private keys never live here.
+func (l Layout) Keys() string { return filepath.Join(l.Dir(), "keys") }
+
 // gitignore is what Init writes in .trilha/.gitignore. The Trilha web
 // framework's dev server writes `*` in this same file because it keeps its
 // build cache in .trilha/; the protocol needs the opposite — everything
@@ -100,6 +104,8 @@ app
 app.exe
 export-app
 export-app.exe
+# A private signing key is never committed; keygen writes it elsewhere.
+keys/*.key
 `
 
 // InitOptions configures Init.
@@ -169,6 +175,8 @@ const (
 	ProblemMissingDir   = "missing-dir"
 	ProblemMissingFile  = "missing-file"
 	ProblemGitignoreAll = "gitignore-all"
+	// ProblemPrivateKey: a `.key` file under .trilha/keys; Arg is the path.
+	ProblemPrivateKey = "private-key-in-repo"
 )
 
 func (p Problem) String() string {
@@ -179,6 +187,8 @@ func (p Problem) String() string {
 		return fmt.Sprintf("missing %s (run `trilha-spec init`)", p.Arg)
 	case ProblemGitignoreAll:
 		return ".trilha/.gitignore ignores everything (`*`): specs, tasks and evidence will not be committed; run `trilha-spec init` to rewrite it"
+	case ProblemPrivateKey:
+		return "private key " + p.Arg + " is inside .trilha; move it out (only `.pub` files belong in keys/)"
 	case ProblemSpecRefMissing:
 		return "spec reference does not exist: " + p.Arg
 	case ProblemSpecNoSuccessor:
@@ -210,6 +220,13 @@ func (l Layout) Doctor() []Problem {
 			if strings.TrimSpace(line) == "*" {
 				problems = append(problems, Problem{Code: ProblemGitignoreAll})
 				break
+			}
+		}
+	}
+	if entries, err := os.ReadDir(l.Keys()); err == nil {
+		for _, e := range entries {
+			if strings.HasSuffix(e.Name(), ".key") {
+				problems = append(problems, Problem{ProblemPrivateKey, DirName + "/keys/" + e.Name()})
 			}
 		}
 	}

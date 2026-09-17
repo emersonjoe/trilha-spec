@@ -5,3 +5,5 @@ app
 app.exe
 export-app
 export-app.exe
+# A private signing key is never committed; keygen writes it elsewhere.
+keys/*.key

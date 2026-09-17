@@ -10,7 +10,7 @@ speaks the protocol.
 
 ```
 .trilha/
-├── .gitignore        runs/ and the framework's build cache; everything else is committed
+├── .gitignore        runs/, keys/*.key and the framework's build cache; everything else is committed
 ├── project.md        Document: see §12
 ├── constitution.md   Markdown, free form
 ├── specs/NNN-name.md Document: see §11
@@ -18,6 +18,7 @@ speaks the protocol.
 ├── agents/name.md    Document: name, role, driver, command, model, tools[], constraints[]
 ├── context/*.md      Markdown, free form; every file is handed to the agent
 ├── evidence/TASK-NNN/NNN-kind.json   see §5
+├── keys/<key_id>.pub public Ed25519 keys, PEM; see §5 — a private key is never here
 └── runs/             opaque to the protocol
 ```
 
@@ -124,6 +125,23 @@ observed; the protocol does not claim it is verified — reconciling it against 
 invoice is a control plane's concern, and prices per model are not in the protocol. An
 execution Attempt (§10) uses the same names.
 
+A record may be **signed**, so a reviewer can tell what a runner attested from what anyone
+could have typed. The signature is one field, left out when the record is unsigned:
+
+```json
+"signature": { "alg": "ed25519", "key_id": "runner-01", "sig": "<base64>" }
+```
+
+The signed bytes are the record's canonical form: the JSON object without `signature`, keys
+sorted, no insignificant whitespace, no HTML escaping — the form any JSON library reproduces
+from the file. `alg` is `ed25519` only; `key_id` is lowercase words joined by `-` or `.`; the
+public key lives in `keys/<key_id>.pub` as PEM (PKIX) and is committed, while the private key
+stays outside `.trilha` (`doctor` reports one inside). A reader checks every record and answers
+one of three verdicts: `unsigned` (no signature — the record is a claim), `valid` (the
+signature matches the record under the named key) or `invalid` (it does not, the key is
+unknown, or the algorithm is not `ed25519`). Signing is opt-in: an unsigned record is still a
+record. An edited record is `invalid`, which is the point.
+
 `verify` runs the task's `checks` then `project.verify`, records one `check` per command, stops
 for nothing, and answers *passed* only when every exit code is 0. A task with no checks at all
 fails verification with a `note` saying so.
@@ -153,6 +171,7 @@ capability `tools` only.
 | `trilha_next` | | — ; a paused project (§12) answers an error with the reason |
 | `trilha_context` | | `id`, `format?` (markdown \| json) |
 | `trilha_list_specs` | | `status?` |
+| `trilha_list_evidence` | | `id`; every record with its `verdict` (and `reason` when invalid) |
 | `trilha_graph` | | |
 | `trilha_move` | yes | `id`, `status` |
 | `trilha_evidence` | yes | `id`, `kind` (note \| artifact), `note?`, `files?`, `by?` |

@@ -359,6 +359,73 @@ func TestRunEvidenceCLI(t *testing.T) {
 	}
 }
 
+func TestSignedEvidenceCLI(t *testing.T) {
+	dir := t.TempDir()
+	keys := filepath.Join(t.TempDir(), "private")
+	must(t, dir, "init", "--name", "demo")
+	must(t, dir, "task", "add", "One", "--status", "ready", "--accept", "ok")
+	if out, err := cli(t, dir, "keygen", "Bad Id"); err == nil || !strings.Contains(out, "usage: trilha-spec keygen") {
+		t.Fatalf("bad key id accepted:\n%s", out)
+	}
+	out := must(t, dir, "keygen", "runner-01", "--out", keys)
+	if !strings.Contains(out, "private key "+filepath.Join(keys, "runner-01.key")) || !strings.Contains(out, "public key  .trilha/keys/runner-01.pub") {
+		t.Fatalf("keygen:\n%s", out)
+	}
+	if st, err := os.Stat(filepath.Join(keys, "runner-01.key")); err != nil || st.Mode().Perm() != 0o600 {
+		t.Fatalf("private key: %v %v", err, st)
+	}
+	if out, err := cli(t, dir, "keygen", "runner-01", "--out", keys); err == nil || !strings.Contains(out, "exists; pick another key id") {
+		t.Fatalf("overwrote a key:\n%s", out)
+	}
+	if out, err := cli(t, dir, "evidence", "TASK-001", "add", "--note", "n", "--key-id", "x"); err == nil || !strings.Contains(out, "--key-id needs --sign-key") {
+		t.Fatalf("key-id alone accepted:\n%s", out)
+	}
+	out = must(t, dir, "evidence", "TASK-001", "add", "--run", "--by", "runner-01", "--model", "m", "--cost", "0.1", "--currency", "USD",
+		"--sign-key", filepath.Join(keys, "runner-01.key"))
+	if !strings.Contains(out, "recorded #1 (.trilha/evidence/TASK-001/001-run.json), signed by runner-01") {
+		t.Fatalf("signed add:\n%s", out)
+	}
+	must(t, dir, "evidence", "TASK-001", "add", "--note", "by hand", "--by", "ana")
+	out = must(t, dir, "evidence", "TASK-001", "--verify")
+	for _, want := range []string{"#1   ✓ run      runner-01            valid runner-01\n", "#2   ✓ note     ana                  unsigned\n", "2 record(s), 1 key(s) in .trilha/keys\n"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("verify lacks %q:\n%s", want, out)
+		}
+	}
+	if out := must(t, dir, "evidence", "TASK-001", "--verify", "--json"); !strings.Contains(out, `"verdict": "valid"`) || !strings.Contains(out, `"key_id": "runner-01"`) || !strings.Contains(out, `"verdict": "unsigned"`) {
+		t.Fatalf("verify json:\n%s", out)
+	}
+	if out := must(t, dir, "context", "TASK-001"); !strings.Contains(out, "#1 run by runner-01: m 0.1 USD · signed by runner-01\n") || !strings.Contains(out, "#2 note by ana: by hand · unverified\n") {
+		t.Fatalf("context:\n%s", out)
+	}
+	// Edit the record after the fact: the signature no longer matches.
+	rec := filepath.Join(dir, ".trilha", "evidence", "TASK-001", "001-run.json")
+	b, _ := os.ReadFile(rec)
+	os.WriteFile(rec, []byte(strings.Replace(string(b), `"passed": true`, `"passed": false`, 1)), 0o644)
+	out, err := cli(t, dir, "evidence", "TASK-001", "--verify")
+	if err == nil || !strings.Contains(out, "invalid runner-01 (signature does not match the record)") || !strings.Contains(out, "error: 1 invalid signature(s)") {
+		t.Fatalf("edited record passed:\n%s", out)
+	}
+	if out, err := cliEnv(t, dir, []string{"TRILHA_LANG=pt"}, "evidence", "TASK-001", "--verify"); err == nil || !strings.Contains(out, "erro: 1 assinatura(s) inválida(s)") {
+		t.Fatalf("pt:\n%s", out)
+	}
+	// An unknown key directory is an empty keyring: every signature is invalid, none unsigned.
+	if out, err := cli(t, dir, "evidence", "TASK-001", "--verify", "--keys", filepath.Join(dir, "nowhere")); err == nil || !strings.Contains(out, "unknown key runner-01") {
+		t.Fatalf("empty keyring:\n%s", out)
+	}
+	// A private key inside .trilha is a doctor problem, in both languages.
+	os.WriteFile(filepath.Join(dir, ".trilha", "keys", "runner-01.key"), []byte("x"), 0o600)
+	if out, err := cli(t, dir, "doctor"); err == nil || !strings.Contains(out, "private key .trilha/keys/runner-01.key is inside .trilha") {
+		t.Fatalf("doctor:\n%s", out)
+	}
+	if out, err := cliEnv(t, dir, []string{"TRILHA_LANG=pt"}, "doctor"); err == nil || !strings.Contains(out, "a chave privada .trilha/keys/runner-01.key está dentro de .trilha") {
+		t.Fatalf("doctor pt:\n%s", out)
+	}
+	if gi, _ := os.ReadFile(filepath.Join(dir, ".trilha", ".gitignore")); !strings.Contains(string(gi), "keys/*.key") {
+		t.Fatalf("gitignore:\n%s", gi)
+	}
+}
+
 func TestUsage(t *testing.T) {
 	if out, err := cli(t, t.TempDir()); err == nil || !strings.Contains(out, "usage:") {
 		t.Fatalf("no args:\n%s", out)
