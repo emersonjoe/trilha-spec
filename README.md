@@ -113,7 +113,8 @@ because `trilha` already owns `mcp`, `agents`, `ctx`, `check` and the `.trilha/`
 a build cache. [docs/adr/001](docs/adr/001-tres-repositorios.md) records the conflicts and the
 two changes the framework needs so `trilha spec …` dispatches here, git-style.
 
-Read the full protocol in [docs/protocol.md](docs/protocol.md).
+Read the full protocol in [docs/protocol.md](docs/protocol.md); what it still lacks is in
+[docs/roadmap.md](docs/roadmap.md).
 
 ## License
 

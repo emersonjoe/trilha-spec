@@ -29,3 +29,17 @@ shell commands, and other important information, read the current plan
   `https://emersonjoe.github.io/trilha/learn/agentic-protocol` (pt: `/pt/aprender/agentico-protocolo`). A change that alters what a user types or
   sees — a command, a flag, a file format, an output — updates that chapter in the same session:
   `site/internal/docs/content/en/learn/agentic-protocol.md` and `site/internal/docs/content/pt/aprender/agentico-protocolo.md` in the `emersonjoe/trilha` repository, both locales, before the spec closes.
+
+## Agent skills
+
+### Issue tracker
+
+Work is tracked in this repository's GitHub Issues. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the canonical five-label triage vocabulary. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Use the single-context domain documentation layout. See `docs/agents/domain.md`.

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/emersonjoe/trilha-spec/spec"
@@ -28,7 +29,9 @@ type Agent struct {
 	// Command is the program the exec driver starts, e.g. `claude -p -`.
 	Command string `json:"command,omitempty"`
 	// Model is the model the ai driver asks for.
-	Model string `json:"model,omitempty"`
+	Model       string `json:"model,omitempty"`
+	MaxAttempts int    `json:"max_attempts,omitempty"`
+	TokenBudget int    `json:"token_budget,omitempty"`
 	// Tools is what it may do: read, write, run, git, network.
 	Tools       []string    `json:"tools,omitempty"`
 	Constraints []string    `json:"constraints,omitempty"`
@@ -53,6 +56,8 @@ func Parse(src []byte) (*Agent, error) {
 		Driver:      d.Fields.Get("driver"),
 		Command:     d.Fields.Get("command"),
 		Model:       d.Fields.Get("model"),
+		MaxAttempts: parseAgentInt(d.Fields.Get("max_attempts")),
+		TokenBudget: parseAgentInt(d.Fields.Get("token_budget")),
 		Tools:       d.Fields.GetList("tools"),
 		Constraints: d.Fields.GetList("constraints"),
 		Body:        d.Body,
@@ -76,6 +81,12 @@ func (a *Agent) Validate() error {
 		default:
 			errs = append(errs, fmt.Sprintf("tool %q is not one of read, write, run, git, network", t))
 		}
+	}
+	if a.MaxAttempts < 0 || a.MaxAttempts > 10 {
+		errs = append(errs, "max_attempts must be between 1 and 10 when set")
+	}
+	if a.TokenBudget < 0 {
+		errs = append(errs, "token_budget cannot be negative")
 	}
 	if len(errs) > 0 {
 		return errors.New("agent " + a.Name + ": " + strings.Join(errs, "; "))
@@ -103,9 +114,20 @@ func (a *Agent) Bytes() []byte {
 	if a.Model != "" {
 		d.Fields.Set("model", a.Model)
 	}
+	if a.MaxAttempts > 0 {
+		d.Fields.Set("max_attempts", strconv.Itoa(a.MaxAttempts))
+	}
+	if a.TokenBudget > 0 {
+		d.Fields.Set("token_budget", strconv.Itoa(a.TokenBudget))
+	}
 	d.Fields.SetList("tools", a.Tools)
 	d.Fields.SetList("constraints", a.Constraints)
 	return d.Bytes()
+}
+
+func parseAgentInt(value string) int {
+	number, _ := strconv.Atoi(strings.TrimSpace(value))
+	return number
 }
 
 // Load reads one agent by name.

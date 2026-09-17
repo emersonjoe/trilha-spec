@@ -57,6 +57,9 @@ estável: campos do protocolo primeiro, na ordem abaixo, depois os desconhecidos
 | `depends_on` | não | IDs de task; todos precisam existir; sem ciclo |
 | `acceptance` | de `ready` em diante | o que precisa ser verdade para fechar, em palavras |
 | `checks` | não | comandos que o `verify` roda; programa + argumentos, sem shell |
+| `attempt`, `max_attempts`, `token_budget` | não | limites de execução e metadados da tentativa atual |
+| `retry_of` | não | ID da Run anterior (`run-NNNNNN`) quando esta task é uma correção |
+| `failure_class`, `repair_reason` | não | categoria estável da falha e intenção humana de correção |
 | `created`, `updated` | não | RFC 3339 UTC |
 
 O corpo é o detalhe da especificação que o agente lê.
@@ -151,3 +154,10 @@ Ferramentas de escrita só aparecem com `--write`; ferramenta não listada não 
 Esta página é a versão 0.1. Mudança de campo, transição ou nome de arquivo sobe a versão e é
 registrada em uma spec em `specs/`. Leitores devem tolerar campos e tipos de evidência
 desconhecidos.
+
+## 10. Contrato de execução
+
+O transporte de Runs entre control planes e runners usa `trilha.execution/v1`. O JSON Schema
+normativo está em `contracts/execution/v1/schema.json`; `execution/testdata/run-v1.json` é o
+fixture canônico de compatibilidade. Uma Run é uma execução lógica de uma Task e pode conter
+várias Attempts. A linhagem de correção usa `retry_of` com ID de Run, nunca ID de Task.

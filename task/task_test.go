@@ -37,6 +37,20 @@ func TestParseKeepsUnknownFields(t *testing.T) {
 	}
 }
 
+func TestRetryOfRequiresRunID(t *testing.T) {
+	task := &Task{ID: "TASK-001", Title: "Repair checkout", Status: Idea, RetryOf: "run-000006"}
+	if err := task.Validate(); err != nil {
+		t.Fatalf("valid run lineage rejected: %v", err)
+	}
+
+	for _, retryOf := range []string{"TASK-006", "run-6", "run-00000x"} {
+		task.RetryOf = retryOf
+		if err := task.Validate(); err == nil || !strings.Contains(err.Error(), "retry_of must be a run id") {
+			t.Fatalf("retry_of %q accepted: %v", retryOf, err)
+		}
+	}
+}
+
 func TestTransitions(t *testing.T) {
 	tk := &Task{ID: "TASK-001", Title: "x", Status: Idea}
 	if err := tk.Move(Done); err == nil {

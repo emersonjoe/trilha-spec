@@ -9,3 +9,5 @@ acceptance:
 checks: []
 created: "2026-09-12T23:12:48Z"
 ---
+
+Issue: https://github.com/emersonjoe/trilha-spec/issues/7

@@ -8,9 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/emersonjoe/trilha-spec/execution"
 	"github.com/emersonjoe/trilha-spec/spec"
 )
 
@@ -84,11 +86,22 @@ type Task struct {
 	// Checks are commands that prove the acceptance; `verify` runs them and
 	// records the result as evidence. No shell: a command is a program and
 	// its arguments, split on spaces with double quotes respected.
-	Checks  []string    `json:"checks,omitempty"`
-	Created string      `json:"created,omitempty"`
-	Updated string      `json:"updated,omitempty"`
-	Body    string      `json:"body,omitempty"`
-	Fields  spec.Fields `json:"-"`
+	Checks           []string    `json:"checks,omitempty"`
+	ExpectedFiles    []string    `json:"expected_files,omitempty"`
+	Routes           []string    `json:"routes,omitempty"`
+	Scenarios        []string    `json:"scenarios,omitempty"`
+	Accessibility    []string    `json:"accessibility,omitempty"`
+	SecurityControls []string    `json:"security_controls,omitempty"`
+	MaxAttempts      int         `json:"max_attempts,omitempty"`
+	TokenBudget      int         `json:"token_budget,omitempty"`
+	Attempt          int         `json:"attempt,omitempty"`
+	RetryOf          string      `json:"retry_of,omitempty"`
+	FailureClass     string      `json:"failure_class,omitempty"`
+	RepairReason     string      `json:"repair_reason,omitempty"`
+	Created          string      `json:"created,omitempty"`
+	Updated          string      `json:"updated,omitempty"`
+	Body             string      `json:"body,omitempty"`
+	Fields           spec.Fields `json:"-"`
 }
 
 var reID = regexp.MustCompile(`^TASK-[0-9]{3,}$`)
@@ -103,18 +116,29 @@ func Parse(src []byte) (*Task, error) {
 		return nil, err
 	}
 	t := &Task{
-		ID:         d.Fields.Get("id"),
-		Title:      d.Fields.Get("title"),
-		Status:     Status(d.Fields.Get("status")),
-		Spec:       d.Fields.Get("spec"),
-		Agent:      d.Fields.Get("agent"),
-		DependsOn:  d.Fields.GetList("depends_on"),
-		Acceptance: d.Fields.GetList("acceptance"),
-		Checks:     d.Fields.GetList("checks"),
-		Created:    d.Fields.Get("created"),
-		Updated:    d.Fields.Get("updated"),
-		Body:       d.Body,
-		Fields:     d.Fields,
+		ID:               d.Fields.Get("id"),
+		Title:            d.Fields.Get("title"),
+		Status:           Status(d.Fields.Get("status")),
+		Spec:             d.Fields.Get("spec"),
+		Agent:            d.Fields.Get("agent"),
+		DependsOn:        d.Fields.GetList("depends_on"),
+		Acceptance:       d.Fields.GetList("acceptance"),
+		Checks:           d.Fields.GetList("checks"),
+		ExpectedFiles:    d.Fields.GetList("expected_files"),
+		Routes:           d.Fields.GetList("routes"),
+		Scenarios:        d.Fields.GetList("scenarios"),
+		Accessibility:    d.Fields.GetList("accessibility"),
+		SecurityControls: d.Fields.GetList("security_controls"),
+		MaxAttempts:      parseInt(d.Fields.Get("max_attempts")),
+		TokenBudget:      parseInt(d.Fields.Get("token_budget")),
+		Attempt:          parseInt(d.Fields.Get("attempt")),
+		RetryOf:          d.Fields.Get("retry_of"),
+		FailureClass:     d.Fields.Get("failure_class"),
+		RepairReason:     d.Fields.Get("repair_reason"),
+		Created:          d.Fields.Get("created"),
+		Updated:          d.Fields.Get("updated"),
+		Body:             d.Body,
+		Fields:           d.Fields,
 	}
 	if t.Status == "" {
 		t.Status = Idea
@@ -147,6 +171,18 @@ func (t *Task) Validate() error {
 			errs = append(errs, string(t.Status)+" needs at least one acceptance criterion")
 		}
 	}
+	if t.MaxAttempts < 0 || t.MaxAttempts > 10 {
+		errs = append(errs, "max_attempts must be between 1 and 10 when set")
+	}
+	if t.TokenBudget < 0 {
+		errs = append(errs, "token_budget cannot be negative")
+	}
+	if t.Attempt < 0 {
+		errs = append(errs, "attempt cannot be negative")
+	}
+	if t.RetryOf != "" && !execution.ValidRunID(t.RetryOf) {
+		errs = append(errs, "retry_of must be a run id")
+	}
 	if len(errs) > 0 {
 		return errors.New("task " + t.ID + ": " + strings.Join(errs, "; "))
 	}
@@ -165,6 +201,17 @@ func (t *Task) Bytes() []byte {
 	d.Fields.SetList("depends_on", t.DependsOn)
 	d.Fields.SetList("acceptance", t.Acceptance)
 	d.Fields.SetList("checks", t.Checks)
+	d.Fields.SetList("expected_files", t.ExpectedFiles)
+	d.Fields.SetList("routes", t.Routes)
+	d.Fields.SetList("scenarios", t.Scenarios)
+	d.Fields.SetList("accessibility", t.Accessibility)
+	d.Fields.SetList("security_controls", t.SecurityControls)
+	setIntOpt(&d.Fields, "max_attempts", t.MaxAttempts)
+	setIntOpt(&d.Fields, "token_budget", t.TokenBudget)
+	setIntOpt(&d.Fields, "attempt", t.Attempt)
+	setOpt(&d.Fields, "retry_of", t.RetryOf)
+	setOpt(&d.Fields, "failure_class", t.FailureClass)
+	setOpt(&d.Fields, "repair_reason", t.RepairReason)
 	setOpt(&d.Fields, "created", t.Created)
 	setOpt(&d.Fields, "updated", t.Updated)
 	for _, k := range t.Fields.Keys() {
@@ -180,12 +227,23 @@ func (t *Task) Bytes() []byte {
 	return d.Bytes()
 }
 
-var known = map[string]bool{"id": true, "title": true, "status": true, "spec": true, "agent": true, "depends_on": true, "acceptance": true, "checks": true, "created": true, "updated": true}
+var known = map[string]bool{"id": true, "title": true, "status": true, "spec": true, "agent": true, "depends_on": true, "acceptance": true, "checks": true, "expected_files": true, "routes": true, "scenarios": true, "accessibility": true, "security_controls": true, "max_attempts": true, "token_budget": true, "attempt": true, "retry_of": true, "failure_class": true, "repair_reason": true, "created": true, "updated": true}
 
 func setOpt(f *spec.Fields, k, v string) {
 	if v != "" {
 		f.Set(k, v)
 	}
+}
+
+func setIntOpt(f *spec.Fields, key string, value int) {
+	if value > 0 {
+		f.Set(key, strconv.Itoa(value))
+	}
+}
+
+func parseInt(value string) int {
+	number, _ := strconv.Atoi(strings.TrimSpace(value))
+	return number
 }
 
 // Now is the timestamp format the protocol writes: RFC 3339 in UTC, to the

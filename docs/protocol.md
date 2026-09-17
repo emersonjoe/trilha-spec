@@ -57,6 +57,9 @@ fields first, in the order below, then unknown fields in the order read.
 | `depends_on` | no | task IDs; every one must exist; no cycles |
 | `acceptance` | for `ready` on | what must be true to close, in words |
 | `checks` | no | commands `verify` runs; program + arguments, no shell |
+| `attempt`, `max_attempts`, `token_budget` | no | execution limits and current attempt metadata |
+| `retry_of` | no | the preceding Run ID (`run-NNNNNN`) when this task is a repair |
+| `failure_class`, `repair_reason` | no | stable failure category and human repair intent |
 | `created`, `updated` | no | RFC 3339 UTC |
 
 The body is the specification detail the agent reads.
@@ -151,3 +154,10 @@ Write tools are only listed with `--write`; a tool not listed cannot be called.
 This page is version 0.1. A change to a field, a transition or a file name bumps it and is
 recorded in a spec under `specs/`. Readers should tolerate unknown fields and unknown evidence
 kinds.
+
+## 10. Execution contract
+
+Run transport between control planes and runners uses `trilha.execution/v1`. Its normative
+JSON Schema is `contracts/execution/v1/schema.json`; `execution/testdata/run-v1.json` is the
+canonical compatibility fixture. A Run is one logical execution of a Task and may contain
+multiple Attempts. Repair lineage uses `retry_of` with a Run ID, never a Task ID.

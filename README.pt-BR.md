@@ -105,7 +105,8 @@ A CLI do framework é `trilha`; esta é `trilha-spec`. Não dividem binário por
 [docs/adr/001](docs/adr/001-tres-repositorios.md) registra os conflitos e as duas mudanças que
 o framework precisa para que `trilha spec …` despache para cá, no estilo do git.
 
-O protocolo completo está em [docs/pt-BR/protocol.md](docs/pt-BR/protocol.md).
+O protocolo completo está em [docs/pt-BR/protocol.md](docs/pt-BR/protocol.md); o que ainda
+falta está em [docs/pt-BR/roadmap.md](docs/pt-BR/roadmap.md).
 
 ## Licença
 
