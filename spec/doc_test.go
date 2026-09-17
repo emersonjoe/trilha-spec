@@ -154,7 +154,7 @@ func TestSpecs(t *testing.T) {
 	if err != nil || id != "001-implement-oauth-login" {
 		t.Fatalf("id = %q (%v)", id, err)
 	}
-	if err := l.SaveSpec(NewSpecDoc(id, "Implement OAuth login!")); err != nil {
+	if err := l.SaveSpec(NewSpecDoc(id, "Implement OAuth login!", "en", "")); err != nil {
 		t.Fatal(err)
 	}
 	if got := Slug("Fundação (Fase 0)"); got != "fundacao-fase-0" {
@@ -170,5 +170,37 @@ func TestSpecs(t *testing.T) {
 	}
 	if err := (&Spec{ID: "bad", Title: "x", Status: "draft"}).Validate(); err == nil {
 		t.Fatal("bad id accepted")
+	}
+}
+
+func TestTemplatesByLanguage(t *testing.T) {
+	root := t.TempDir()
+	l, _, err := Init(root, InitOptions{Name: "demo", Lang: "pt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, _ := l.LoadConstitution()
+	if !strings.Contains(c, "# Constituição") {
+		t.Fatalf("pt constitution:\n%s", c)
+	}
+	p, err := l.LoadProject()
+	if err != nil || p.Name != "demo" || p.DefaultAgent != "coder" || !strings.Contains(p.Body, "## Comandos") {
+		t.Fatalf("pt project: %v %+v", err, p)
+	}
+	// Front matter keys never move: an agent manifest in pt-BR is still read by
+	// a reader that knows only the English keys.
+	b, _ := os.ReadFile(l.AgentFile("coder"))
+	if !strings.Contains(string(b), "role: Implementa") || !strings.Contains(string(b), "tools:\n  - read") {
+		t.Fatalf("pt agent:\n%s", b)
+	}
+	s := NewSpecDoc("001-x", "Login", "pt", "")
+	if !strings.Contains(s.Body, "# Login\n\n## Por quê") {
+		t.Fatalf("pt spec:\n%s", s.Body)
+	}
+	if s := NewSpecDoc("001-x", "Login", "xx", ""); !strings.Contains(s.Body, "## Why") {
+		t.Fatalf("unknown language must be English:\n%s", s.Body)
+	}
+	if s := NewSpecDoc("001-x", "Login", "pt", "custom body\n"); s.Body != "custom body\n" {
+		t.Fatalf("body must replace the template: %q", s.Body)
 	}
 }

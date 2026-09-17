@@ -71,7 +71,8 @@ trilha-spec init --name my-app                 # .trilha/ with project, constitu
 trilha-spec spec new "OAuth login"             # specs/001-oauth-login.md
 trilha-spec task add "Provider config" --spec 001-oauth-login --status ready \
     --accept "config loads" --check "go test ./internal/oauth/..."
-trilha-spec task add "Login page" --depends TASK-001 --status ready --accept "login works"
+trilha-spec task add "Login page" --depends TASK-001 --status ready --accept "login works" \
+    --body "The page posts to /login; errors stay on the page."   # or --body-file PATH (- for stdin)
 trilha-spec task next                          # what can run now
 trilha-spec context TASK-001                   # the pack an agent receives
 trilha-spec task move TASK-001 running
@@ -83,8 +84,9 @@ trilha-spec mcp --write                        # the same over MCP, for Claude C
 ```
 
 Every listing takes `--json`. `trilha-spec doctor` says what a reader would trip on.
-`TRILHA_LANG=pt` (or `pt-BR`) puts every message, `--help` included, in Portuguese; the files
-and `--json` do not change, because status names, field names and IDs are the protocol.
+`TRILHA_LANG=pt` (or `pt-BR`) puts every message, `--help` included, in Portuguese, and makes
+`init` and `spec new` write their templates in Portuguese; the file formats and `--json` do
+not change, because status names, field names and IDs are the protocol.
 
 ### MCP
 

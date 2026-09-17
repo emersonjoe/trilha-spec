@@ -1,7 +1,10 @@
 package main
 
 import (
+	"errors"
 	"flag"
+	"io"
+	"os"
 	"path/filepath"
 )
 
@@ -29,4 +32,27 @@ func parse(fs *flag.FlagSet, args []string) ([]string, error) {
 		pos = append(pos, rest[0])
 		args = rest[1:]
 	}
+}
+
+// body is the pair of flags a document body comes from: --body with the text
+// on the line, or --body-file with a path (`-` for stdin).
+type body struct{ text, file *string }
+
+func bodyFlags(fs *flag.FlagSet) body {
+	return body{text: fs.String("body", "", "Markdown body"), file: fs.String("body-file", "", "file holding the body; - for stdin")}
+}
+
+func (b body) read() (string, error) {
+	if *b.text != "" && *b.file != "" {
+		return "", errors.New(T("--body and --body-file are exclusive"))
+	}
+	if *b.file == "" {
+		return *b.text, nil
+	}
+	if *b.file == "-" {
+		raw, err := io.ReadAll(os.Stdin)
+		return string(raw), err
+	}
+	raw, err := os.ReadFile(*b.file)
+	return string(raw), err
 }

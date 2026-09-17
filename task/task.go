@@ -201,11 +201,11 @@ func (t *Task) Bytes() []byte {
 	d.Fields.SetList("depends_on", t.DependsOn)
 	d.Fields.SetList("acceptance", t.Acceptance)
 	d.Fields.SetList("checks", t.Checks)
-	d.Fields.SetList("expected_files", t.ExpectedFiles)
-	d.Fields.SetList("routes", t.Routes)
-	d.Fields.SetList("scenarios", t.Scenarios)
-	d.Fields.SetList("accessibility", t.Accessibility)
-	d.Fields.SetList("security_controls", t.SecurityControls)
+	setListOpt(&d.Fields, "expected_files", t.ExpectedFiles)
+	setListOpt(&d.Fields, "routes", t.Routes)
+	setListOpt(&d.Fields, "scenarios", t.Scenarios)
+	setListOpt(&d.Fields, "accessibility", t.Accessibility)
+	setListOpt(&d.Fields, "security_controls", t.SecurityControls)
 	setIntOpt(&d.Fields, "max_attempts", t.MaxAttempts)
 	setIntOpt(&d.Fields, "token_budget", t.TokenBudget)
 	setIntOpt(&d.Fields, "attempt", t.Attempt)
@@ -232,6 +232,14 @@ var known = map[string]bool{"id": true, "title": true, "status": true, "spec": t
 func setOpt(f *spec.Fields, k, v string) {
 	if v != "" {
 		f.Set(k, v)
+	}
+}
+
+// setListOpt writes a list only when it has items: the optional lists stay
+// out of a task that does not use them.
+func setListOpt(f *spec.Fields, key string, items []string) {
+	if len(items) > 0 {
+		f.SetList(key, items)
 	}
 }
 

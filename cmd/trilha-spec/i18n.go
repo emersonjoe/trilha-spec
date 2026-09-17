@@ -57,8 +57,9 @@ const usagePT = `trilha-spec ` + version + ` — o protocolo aberto para trabalh
 uso: trilha-spec <comando> [flags]
 
   init [dir]                    cria .trilha/ (projeto, constituição, agentes)
-  spec new <título> | list | show <id>
+  spec new <título> [--issue N] [--body TEXTO | --body-file CAMINHO] | list | show <id>
   task add <título> [--spec ID] [--depends A,B] [--agent N] [--status S] [--accept C]... [--check CMD]...
+           [--body TEXTO | --body-file CAMINHO]   (CAMINHO "-" lê stdin)
   task list [--status S] | show <id> | next | move <id> <status> | graph [--dot]
   agent list | show <nome>
   context <task-id>             o pacote de contexto que um agente recebe (--json para ferramentas)
@@ -69,7 +70,7 @@ uso: trilha-spec <comando> [flags]
   version
 
 Toda listagem aceita --json. Status: idea spec ready running verify review done blocked failed.
-TRILHA_LANG=pt traduz as mensagens; formatos de arquivo e --json não mudam.
+TRILHA_LANG=pt traduz as mensagens e os templates que init e spec new escrevem; formatos de arquivo e --json não mudam.
 `
 
 // pt is the Portuguese (Brazil) table. Keys are the exact English strings
@@ -88,6 +89,7 @@ var pt = map[string]string{
 	"usage: trilha-spec spec show <id>":                      "uso: trilha-spec spec show <id>",
 	"created %s (%s)\n":                                      "criado %s (%s)\n",
 	"unknown spec command %q":                                "subcomando de spec desconhecido %q",
+	"--body and --body-file are exclusive":                   "--body e --body-file são exclusivos",
 	// task
 	"usage: trilha-spec task add|list|show|next|move|graph": "uso: trilha-spec task add|list|show|next|move|graph",
 	"usage: trilha-spec task add <title> [flags]":           "uso: trilha-spec task add <título> [flags]",

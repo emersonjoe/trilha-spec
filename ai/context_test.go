@@ -17,7 +17,7 @@ func TestBuild(t *testing.T) {
 		t.Fatal(err)
 	}
 	st := &task.Store{Layout: l}
-	if err := l.SaveSpec(spec.NewSpecDoc("001-oauth", "OAuth")); err != nil {
+	if err := l.SaveSpec(spec.NewSpecDoc("001-oauth", "OAuth", "en", "")); err != nil {
 		t.Fatal(err)
 	}
 	dep, _ := st.Create("Base", func(x *task.Task) { x.Acceptance = []string{"x"} })

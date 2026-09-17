@@ -1,0 +1,10 @@
+{
+  "task": "TASK-013",
+  "seq": 3,
+  "kind": "note",
+  "at": "2026-09-17T21:37:03Z",
+  "by": "claude-opus-5",
+  "exit_code": 0,
+  "passed": true,
+  "note": "Spec 003 implemented: --body/--body-file on task add and spec new, pt-BR templates for init and spec new, --status in help; README and hands-on chapter in both locales."
+}

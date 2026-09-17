@@ -108,6 +108,9 @@ type InitOptions struct {
 	Name string
 	// Description is the one-line summary in project.md.
 	Description string
+	// Lang selects the language of the templates written: "en" (default) or
+	// "pt". Field names stay English whatever the language; only prose moves.
+	Lang string
 }
 
 // Init creates .trilha/ with its directories, a project.md, a constitution
@@ -127,12 +130,13 @@ func Init(root string, o InitOptions) (Layout, []string, error) {
 			return l, wrote, err
 		}
 	}
+	tpl := Templates(o.Lang)
 	files := map[string][]byte{
 		filepath.Join(l.Dir(), ".gitignore"): []byte(gitignore),
-		l.Project():                          projectTemplate(name, o.Description),
-		l.Constitution():                     []byte(constitutionTemplate),
-		l.AgentFile("coder"):                 []byte(agentCoder),
-		l.AgentFile("reviewer"):              []byte(agentReviewer),
+		l.Project():                          projectTemplate(name, o.Description, tpl),
+		l.Constitution():                     []byte(tpl.Constitution),
+		l.AgentFile("coder"):                 []byte(tpl.AgentCoder),
+		l.AgentFile("reviewer"):              []byte(tpl.AgentReviewer),
 		filepath.Join(l.Specs(), ".keep"):    nil,
 		filepath.Join(l.Tasks(), ".keep"):    nil,
 		filepath.Join(l.Context(), ".keep"):  nil,
@@ -206,15 +210,38 @@ func (l Layout) Doctor() []Problem {
 	return problems
 }
 
-func projectTemplate(name, desc string) []byte {
+func projectTemplate(name, desc string, tpl TemplateSet) []byte {
 	d := &Doc{}
 	d.Fields.Set("name", name)
 	d.Fields.Set("description", desc)
 	d.Fields.Set("default_agent", "coder")
 	d.Fields.SetList("verify", []string{})
-	d.Body = `# ` + name + `
+	d.Body = "# " + name + "\n\n" + tpl.ProjectBody
+	return d.Bytes()
+}
 
-What this project is, in the words an agent reading it for the first time needs:
+// TemplateSet is the prose `init` and `spec new` write, in one language.
+// Front matter keys are never translated: they are the protocol.
+type TemplateSet struct {
+	ProjectBody   string
+	Constitution  string
+	AgentCoder    string
+	AgentReviewer string
+	// SpecBody is the body of a new specification; %s is the title.
+	SpecBody string
+}
+
+// Templates answers the set for a language: "pt" (Brazilian Portuguese) or
+// anything else for English.
+func Templates(lang string) TemplateSet {
+	if lang == "pt" {
+		return templatesPT
+	}
+	return templatesEN
+}
+
+var templatesEN = TemplateSet{
+	ProjectBody: `What this project is, in the words an agent reading it for the first time needs:
 what it does, who uses it, where the code lives, how to run it and how to test it.
 
 ## Commands
@@ -225,11 +252,8 @@ what it does, who uses it, where the code lives, how to run it and how to test i
 ## Where things are
 
 - ` + "`app/`" + `:
-`
-	return d.Bytes()
-}
-
-const constitutionTemplate = `# Constitution
+`,
+	Constitution: `# Constitution
 
 The rules every task in this project obeys. An agent reads this before it
 reads the task; a reviewer checks the evidence against it.
@@ -245,9 +269,8 @@ reads the task; a reviewer checks the evidence against it.
 
 - Language of code and identifiers:
 - Formatting and lint:
-`
-
-const agentCoder = `---
+`,
+	AgentCoder: `---
 name: coder
 role: Implements a task inside its own worktree and produces evidence.
 driver: exec
@@ -267,9 +290,8 @@ constraints:
 Reads the context pack, implements the task, runs its checks and reports what
 changed. ` + "`driver`" + ` and ` + "`command`" + ` are how the runner starts it; see the
 trilha-runner documentation for the drivers available.
-`
-
-const agentReviewer = `---
+`,
+	AgentReviewer: `---
 name: reviewer
 role: Reads the evidence of a task and decides whether it moves to done.
 driver: exec
@@ -284,4 +306,106 @@ constraints:
 
 Checks each acceptance criterion against the evidence recorded for the task
 and the constitution. Approves (review → done) or returns (review → ready).
-`
+`,
+	SpecBody: `# %s
+
+## Why
+
+The problem, and what people do today without this.
+
+## What changes
+
+The contract as the documentation will tell it.
+
+## Out of scope
+
+## Acceptance
+
+- **SC-001**
+`,
+}
+
+var templatesPT = TemplateSet{
+	ProjectBody: `O que é este projeto, nas palavras de que um agente que o lê pela primeira vez precisa:
+o que faz, quem usa, onde está o código, como rodar e como testar.
+
+## Comandos
+
+- build:
+- test:
+
+## Onde ficam as coisas
+
+- ` + "`app/`" + `:
+`,
+	Constitution: `# Constituição
+
+As regras que toda task deste projeto obedece. Um agente lê isto antes de ler a
+task; um revisor confere a evidência contra isto.
+
+## Princípios
+
+1. **Teste primeiro.** Uma task que muda comportamento entrega o teste que prova a mudança.
+2. **Commits pequenos, um por task.** A branch de uma task contém o trabalho daquela task e nada mais.
+3. **Nenhuma dependência nova sem spec.** Dependência é decisão, e decisões vivem em ` + "`specs/`" + `.
+4. **Sem evidência não aconteceu.** Uma task está pronta quando seus critérios de aceitação têm evidência gravada.
+
+## Estilo
+
+- Língua do código e dos identificadores:
+- Formatação e lint:
+`,
+	AgentCoder: `---
+name: coder
+role: Implementa uma task dentro da própria worktree e produz evidência.
+driver: exec
+command: ""
+tools:
+  - read
+  - write
+  - run
+constraints:
+  - Fique dentro da worktree da task.
+  - Não toque em tasks além da que foi atribuída.
+  - Rode os checks listados na task antes de reportar.
+---
+
+# coder
+
+Lê o pacote de contexto, implementa a task, roda seus checks e reporta o que
+mudou. ` + "`driver`" + ` e ` + "`command`" + ` são como o runner o inicia; veja a
+documentação do trilha-runner para os drivers disponíveis.
+`,
+	AgentReviewer: `---
+name: reviewer
+role: Lê a evidência de uma task e decide se ela vai para done.
+driver: exec
+command: ""
+tools:
+  - read
+constraints:
+  - Nunca edita código; uma task rejeitada volta para ready com uma nota.
+---
+
+# reviewer
+
+Confere cada critério de aceitação contra a evidência gravada para a task e
+contra a constituição. Aprova (review → done) ou devolve (review → ready).
+`,
+	SpecBody: `# %s
+
+## Por quê
+
+O problema, e o que as pessoas fazem hoje sem isto.
+
+## O que muda
+
+O contrato, do jeito que a documentação vai contar.
+
+## Fora de escopo
+
+## Aceitação
+
+- **SC-001**
+`,
+}

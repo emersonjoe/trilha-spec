@@ -32,8 +32,9 @@ const usage = `trilha-spec ` + version + ` — the open protocol for work agents
 usage: trilha-spec <command> [flags]
 
   init [dir]                    create .trilha/ (project, constitution, agents)
-  spec new <title> | list | show <id>
+  spec new <title> [--issue N] [--body TEXT | --body-file PATH] | list | show <id>
   task add <title> [--spec ID] [--depends A,B] [--agent N] [--status S] [--accept C]... [--check CMD]...
+           [--body TEXT | --body-file PATH]   (PATH "-" reads stdin)
   task list [--status S] | show <id> | next | move <id> <status> | graph [--dot]
   agent list | show <name>
   context <task-id>             the context pack an agent receives (--json for tools)
@@ -44,7 +45,7 @@ usage: trilha-spec <command> [flags]
   version
 
 Every listing takes --json. Statuses: idea spec ready running verify review done blocked failed.
-TRILHA_LANG=pt translates the messages; file formats and --json do not change.
+TRILHA_LANG=pt translates the messages and the templates init and spec new write; file formats and --json do not change.
 `
 
 func main() {
@@ -127,7 +128,7 @@ func cmdInit(args []string, out io.Writer) error {
 	if len(pos) > 0 {
 		dir = pos[0]
 	}
-	l, wrote, err := spec.Init(dir, spec.InitOptions{Name: *name, Description: *desc})
+	l, wrote, err := spec.Init(dir, spec.InitOptions{Name: *name, Description: *desc, Lang: lang})
 	if err != nil {
 		return err
 	}
@@ -155,7 +156,12 @@ func cmdSpec(args []string, out io.Writer) error {
 	case "new":
 		fs := flags("spec new")
 		issue := fs.String("issue", "", "issue URL or number")
+		body := bodyFlags(fs)
 		pos, err := parse(fs, args[1:])
+		if err != nil {
+			return err
+		}
+		text, err := body.read()
 		if err != nil {
 			return err
 		}
@@ -167,7 +173,7 @@ func cmdSpec(args []string, out io.Writer) error {
 		if err != nil {
 			return err
 		}
-		s := spec.NewSpecDoc(id, title)
+		s := spec.NewSpecDoc(id, title, lang, text)
 		s.Issue = *issue
 		if err := l.SaveSpec(s); err != nil {
 			return err
@@ -232,7 +238,12 @@ func cmdTask(args []string, out io.Writer) error {
 		var accept, checks multi
 		fs.Var(&accept, "accept", "acceptance criterion (repeatable)")
 		fs.Var(&checks, "check", "check command (repeatable)")
+		body := bodyFlags(fs)
 		pos, err := parse(fs, args[1:])
+		if err != nil {
+			return err
+		}
+		text, err := body.read()
 		if err != nil {
 			return err
 		}
@@ -246,6 +257,7 @@ func cmdTask(args []string, out io.Writer) error {
 			t.Status = task.Status(*status)
 			t.Acceptance = accept
 			t.Checks = checks
+			t.Body = text
 			for _, d := range strings.Split(*deps, ",") {
 				if d = strings.TrimSpace(d); d != "" {
 					t.DependsOn = append(t.DependsOn, d)

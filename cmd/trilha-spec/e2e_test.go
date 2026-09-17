@@ -160,6 +160,54 @@ func TestPortugueseMessages(t *testing.T) {
 	}
 }
 
+// --body and --body-file write the document body; TRILHA_LANG picks the
+// language of what init and spec new write when no body is given.
+func TestBodyAndTemplates(t *testing.T) {
+	dir := t.TempDir()
+	pt := []string{"TRILHA_LANG=pt-BR"}
+	if out, err := cliEnv(t, dir, pt, "init", "--name", "demo"); err != nil {
+		t.Fatalf("init: %v\n%s", err, out)
+	}
+	c, _ := os.ReadFile(filepath.Join(dir, ".trilha", "constitution.md"))
+	if !strings.Contains(string(c), "# Constituição") {
+		t.Fatalf("pt constitution:\n%s", c)
+	}
+	if out, err := cliEnv(t, dir, pt, "spec", "new", "Login OAuth", "--issue", "7"); err != nil || !strings.Contains(out, "criado 001-login-oauth") {
+		t.Fatalf("spec new: %v\n%s", err, out)
+	}
+	if out := must(t, dir, "spec", "show", "001-login-oauth"); !strings.Contains(out, "issue: 7\n") || !strings.Contains(out, "## Por quê") {
+		t.Fatalf("pt spec template:\n%s", out)
+	}
+	must(t, dir, "task", "add", "Provider config", "--body", "Read `config.yaml`; fail loudly when a key is missing.")
+	if out := must(t, dir, "task", "show", "TASK-001"); !strings.Contains(out, "---\n\nRead `config.yaml`; fail loudly") || strings.Contains(out, "expected_files") {
+		t.Fatalf("task body:\n%s", out)
+	}
+	if out := must(t, dir, "task", "show", "TASK-001", "--json"); !strings.Contains(out, `"body": "Read `) {
+		t.Fatalf("task body json:\n%s", out)
+	}
+	bodyFile := filepath.Join(dir, "body.md")
+	os.WriteFile(bodyFile, []byte("# From a file\n\nline two\n"), 0o644)
+	must(t, dir, "spec", "new", "Second", "--body-file", bodyFile)
+	if out := must(t, dir, "spec", "show", "002-second"); !strings.Contains(out, "# From a file\n\nline two\n") || strings.Contains(out, "## Why") {
+		t.Fatalf("spec body-file:\n%s", out)
+	}
+	cmd := exec.Command(bin, "task", "add", "From stdin", "--body-file", "-")
+	cmd.Dir = dir
+	cmd.Stdin = strings.NewReader("piped body\n")
+	if out, err := cmd.CombinedOutput(); err != nil || !strings.Contains(string(out), "created TASK-002") {
+		t.Fatalf("stdin body: %v\n%s", err, out)
+	}
+	if out := must(t, dir, "task", "show", "TASK-002"); !strings.Contains(out, "piped body") {
+		t.Fatalf("stdin body:\n%s", out)
+	}
+	if out, err := cli(t, dir, "task", "add", "Both", "--body", "a", "--body-file", bodyFile); err == nil || !strings.Contains(out, "exclusive") {
+		t.Fatalf("both flags accepted:\n%s", out)
+	}
+	if out := must(t, dir, "--help"); !strings.Contains(out, "[--status S]") || !strings.Contains(out, "--body-file PATH") {
+		t.Fatalf("help:\n%s", out)
+	}
+}
+
 func TestUsage(t *testing.T) {
 	if out, err := cli(t, t.TempDir()); err == nil || !strings.Contains(out, "usage:") {
 		t.Fatalf("no args:\n%s", out)

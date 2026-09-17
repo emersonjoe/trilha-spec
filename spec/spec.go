@@ -176,24 +176,14 @@ var accents = map[rune]rune{
 	'ú': 'u', 'ù': 'u', 'û': 'u', 'ü': 'u', 'ç': 'c', 'ñ': 'n',
 }
 
-// NewSpecDoc is what `spec new` writes: the spec-kit short form, in Markdown.
-func NewSpecDoc(id, title string) *Spec {
+// NewSpecDoc is what `spec new` writes: the spec-kit short form, in Markdown,
+// in the language of Templates(lang). A body, when given, replaces the
+// template.
+func NewSpecDoc(id, title, lang, body string) *Spec {
 	s := &Spec{ID: id, Title: title, Status: "draft"}
-	s.Body = `# ` + title + `
-
-## Why
-
-The problem, and what people do today without this.
-
-## What changes
-
-The contract as the documentation will tell it.
-
-## Out of scope
-
-## Acceptance
-
-- **SC-001**
-`
+	if body == "" {
+		body = fmt.Sprintf(Templates(lang).SpecBody, title)
+	}
+	s.Body = body
 	return s
 }

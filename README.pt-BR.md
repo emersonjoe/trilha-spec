@@ -67,7 +67,8 @@ go install github.com/emersonjoe/trilha-spec/cmd/trilha-spec@latest
 trilha-spec init --name meu-app
 trilha-spec spec new "Login OAuth"
 trilha-spec task add "Config do provedor" --spec 001-login-oauth --status ready \
-    --accept "config carrega" --check "go test ./internal/oauth/..."
+    --accept "config carrega" --check "go test ./internal/oauth/..." \
+    --body "Lê config.yaml; falha alto quando falta chave."   # ou --body-file CAMINHO (- lê stdin)
 trilha-spec task next                          # o que pode rodar agora
 trilha-spec context TASK-001                   # o pacote que um agente recebe
 trilha-spec task move TASK-001 running
@@ -79,8 +80,9 @@ trilha-spec mcp --write                        # o mesmo por MCP, para Claude Co
 ```
 
 Toda listagem aceita `--json`. `trilha-spec doctor` diz onde um leitor tropeçaria.
-`TRILHA_LANG=pt` (ou `pt-BR`) põe toda mensagem em português, `--help` incluído; os arquivos e
-o `--json` não mudam, porque nomes de status, de campo e IDs são o protocolo.
+`TRILHA_LANG=pt` (ou `pt-BR`) põe toda mensagem em português, `--help` incluído, e faz `init` e
+`spec new` escreverem seus templates em português; os formatos de arquivo e o `--json` não
+mudam, porque nomes de status, de campo e IDs são o protocolo.
 
 ### MCP
 
