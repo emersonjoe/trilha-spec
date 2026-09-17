@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/emersonjoe/trilha-spec/agent"
@@ -39,6 +40,7 @@ usage: trilha-spec <command> [flags]
            [--body TEXT | --body-file PATH]   (PATH "-" reads stdin)
   task list [--status S] | show <id> | next | move <id> <status> | graph [--dot]
   agent list | show <name>
+  project show | pause [--reason R] | resume | limit <key> <value|->
   context <task-id>             the context pack an agent receives (--json for tools)
   verify <task-id> [--dir D]    run the task's checks and record evidence
   evidence <task-id> [add --note TEXT]
@@ -73,6 +75,8 @@ func run(cmd string, args []string, out io.Writer) error {
 		return cmdTask(args, out)
 	case "agent":
 		return cmdAgent(args, out)
+	case "project":
+		return cmdProject(args, out)
 	case "context":
 		return cmdContext(args, out)
 	case "verify":
@@ -399,6 +403,17 @@ func cmdTask(args []string, out io.Writer) error {
 			return err
 		}
 		ready := g.Ready()
+		// A paused project answers nothing and says why. The list stays a
+		// list for tools; the reason goes to stderr, and `project show --json`
+		// has it in full.
+		if p, err := st.Layout.LoadProject(); err == nil && p.Paused {
+			ready = nil
+			if !*asJSON {
+				fmt.Fprintf(out, T("project is paused: %s\n"), pauseReason(p))
+				return nil
+			}
+			fmt.Fprintf(os.Stderr, T("project is paused: %s\n"), pauseReason(p))
+		}
 		if *asJSON {
 			if ready == nil {
 				ready = []*task.Task{}
@@ -653,6 +668,85 @@ func cmdMCP(args []string) error {
 		fmt.Fprint(os.Stderr, T("read-only; pass --write to offer trilha_move, trilha_evidence and trilha_verify\n"))
 	}
 	return s.ServeStdio(context.Background(), os.Stdin, os.Stdout)
+}
+
+// pauseReason is the reason and the moment, for a person.
+func pauseReason(p *spec.Project) string {
+	reason := p.PauseReason
+	if reason == "" {
+		reason = "(no reason given)"
+	}
+	return reason + " (since " + p.PausedAt + ")"
+}
+
+func cmdProject(args []string, out io.Writer) error {
+	if len(args) == 0 {
+		return errors.New(T("usage: trilha-spec project show | pause [--reason R] | resume | limit <key> <value|->"))
+	}
+	st, err := store()
+	if err != nil {
+		return err
+	}
+	l := st.Layout
+	p, err := l.LoadProject()
+	if err != nil {
+		return err
+	}
+	switch args[0] {
+	case "show":
+		fs := flags("project show")
+		asJSON := fs.Bool("json", false, "")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *asJSON {
+			return printJSON(out, p)
+		}
+		_, err = out.Write(p.Bytes())
+		return err
+	case "pause":
+		fs := flags("project pause")
+		reason := fs.String("reason", "", "why the queue stops")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		p.Pause(*reason)
+		if err := l.SaveProject(p); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, T("%s is paused: %s\n"), p.Name, pauseReason(p))
+		return nil
+	case "resume":
+		p.Resume()
+		if err := l.SaveProject(p); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, T("%s resumed\n"), p.Name)
+		return nil
+	case "limit":
+		if len(args) != 3 {
+			return errors.New(T("usage: trilha-spec project limit <key> <value|->"))
+		}
+		key, val := args[1], args[2]
+		if val == "-" {
+			delete(p.Limits, key)
+		} else {
+			f, err := strconv.ParseFloat(val, 64)
+			if err != nil {
+				return fmt.Errorf(T("limit %s: %q is not a number"), key, val)
+			}
+			if p.Limits == nil {
+				p.Limits = map[string]float64{}
+			}
+			p.Limits[key] = f
+		}
+		if err := l.SaveProject(p); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, T("updated %s\n"), rel(l, l.Project()))
+		return nil
+	}
+	return fmt.Errorf(T("unknown project command %q"), args[0])
 }
 
 func cmdDoctor(args []string, out io.Writer) error {

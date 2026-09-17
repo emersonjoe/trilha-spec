@@ -90,4 +90,16 @@ func TestStdioRoundTrip(t *testing.T) {
 	if !strings.Contains(string(resp.Result), `001-one is now approved`) {
 		t.Fatalf("spec move: %s", lines[9])
 	}
+	// A paused project: next reports the reason instead of a list.
+	p, _ := l.LoadProject()
+	p.Pause("breaker:max_cost_per_hour")
+	if err := l.SaveProject(p); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	rw.ServeStdio(context.Background(), strings.NewReader(`{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"trilha_next"}}`+"\n"), &out)
+	json.Unmarshal([]byte(strings.TrimSpace(out.String())), &resp)
+	if !strings.Contains(string(resp.Result), `"isError":true`) || !strings.Contains(string(resp.Result), "project is paused: breaker:max_cost_per_hour") {
+		t.Fatalf("paused next: %s", out.String())
+	}
 }

@@ -288,6 +288,50 @@ func TestSpecSecurityCLI(t *testing.T) {
 	}
 }
 
+func TestProjectLimitsAndPauseCLI(t *testing.T) {
+	dir := t.TempDir()
+	must(t, dir, "init", "--name", "demo")
+	must(t, dir, "task", "add", "One", "--status", "ready", "--accept", "ok")
+	if out := must(t, dir, "task", "next"); !strings.Contains(out, "TASK-001") {
+		t.Fatalf("next:\n%s", out)
+	}
+	must(t, dir, "project", "limit", "max_cost_per_hour", "5.00")
+	must(t, dir, "project", "limit", "max_repeated_failure_class", "3")
+	if out, err := cli(t, dir, "project", "limit", "max_failure_rate", "half"); err == nil || !strings.Contains(out, `"half" is not a number`) {
+		t.Fatalf("text limit accepted:\n%s", out)
+	}
+	if out := must(t, dir, "project", "show"); !strings.Contains(out, "limits:\n  max_cost_per_hour: 5\n  max_repeated_failure_class: 3\n") {
+		t.Fatalf("show:\n%s", out)
+	}
+	if out := must(t, dir, "context", "TASK-001"); !strings.Contains(out, "### Limits\n\n- max_cost_per_hour: 5\n") {
+		t.Fatalf("context:\n%s", out)
+	}
+	if out := must(t, dir, "project", "pause", "--reason", "breaker:max_repeated_failure_class"); !strings.Contains(out, "demo is paused: breaker:max_repeated_failure_class (since 20") {
+		t.Fatalf("pause:\n%s", out)
+	}
+	if out := must(t, dir, "task", "next"); !strings.Contains(out, "project is paused: breaker:max_repeated_failure_class (since ") || strings.Contains(out, "TASK-001") {
+		t.Fatalf("paused next:\n%s", out)
+	}
+	// --json stays a list — an empty one — and the reason goes to stderr.
+	if out := must(t, dir, "task", "next", "--json"); !strings.Contains(out, "\n[]\n") || !strings.Contains(out, "project is paused") || strings.Contains(out, "TASK-001") {
+		t.Fatalf("paused next --json:\n%s", out)
+	}
+	if out := must(t, dir, "project", "show", "--json"); !strings.Contains(out, `"paused": true`) || !strings.Contains(out, `"pause_reason": "breaker:max_repeated_failure_class"`) || !strings.Contains(out, `"max_cost_per_hour": 5`) {
+		t.Fatalf("show --json:\n%s", out)
+	}
+	if out, err := cliEnv(t, dir, []string{"TRILHA_LANG=pt"}, "task", "next"); err != nil || !strings.Contains(out, "projeto pausado: breaker") {
+		t.Fatalf("pt: %v\n%s", err, out)
+	}
+	must(t, dir, "project", "resume")
+	if out := must(t, dir, "task", "next"); !strings.Contains(out, "TASK-001") {
+		t.Fatalf("resumed next:\n%s", out)
+	}
+	must(t, dir, "project", "limit", "max_cost_per_hour", "-")
+	if out := must(t, dir, "project", "show"); strings.Contains(out, "max_cost_per_hour") || strings.Contains(out, "paused") {
+		t.Fatalf("state left:\n%s", out)
+	}
+}
+
 func TestUsage(t *testing.T) {
 	if out, err := cli(t, t.TempDir()); err == nil || !strings.Contains(out, "usage:") {
 		t.Fatalf("no args:\n%s", out)

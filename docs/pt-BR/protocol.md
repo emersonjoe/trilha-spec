@@ -11,7 +11,7 @@ protocolo.
 ```
 .trilha/
 ├── .gitignore        runs/ e o cache de build do framework; o resto é commitado
-├── project.md        Documento: name, description, default_agent, verify[]
+├── project.md        Documento: ver §12
 ├── constitution.md   Markdown livre
 ├── specs/NNN-nome.md Documento: ver §11
 ├── tasks/TASK-NNN.md Documento: ver §3
@@ -35,13 +35,16 @@ chave: [a, b]
 chave:
   - item
   - item
+chave:
+  sub: escalar
+  sub: escalar
 ---
 
 Corpo, Markdown livre.
 ```
 
-A gramática é de propósito um subconjunto de YAML: escalares, listas de escalares, comentários
-`#` e linhas em branco. Entre aspas duplas, `\"` e `\\` são os únicos escapes; aspas simples
+A gramática é de propósito um subconjunto de YAML: escalares, listas de escalares, mapas de
+escalares de um nível (`chave: {}` é um mapa vazio), comentários `#` e linhas em branco. Entre aspas duplas, `\"` e `\\` são os únicos escapes; aspas simples
 carregam o texto como está. Chave desconhecida é preservada na escrita. A ordem dos campos é
 estável: campos do protocolo primeiro, na ordem abaixo, depois os desconhecidos na ordem lida.
 
@@ -140,7 +143,7 @@ network}, `constraints[]`. O protocolo carrega o manifesto; fazê-lo valer é pa
 |---|---|---|
 | `trilha_list_tasks` | | `status?` |
 | `trilha_get_task` | | `id` |
-| `trilha_next` | | |
+| `trilha_next` | | — ; projeto pausado (§12) responde erro com o motivo |
 | `trilha_context` | | `id`, `format?` (markdown \| json) |
 | `trilha_graph` | | |
 | `trilha_list_specs` | | `status?` |
@@ -200,3 +203,32 @@ Regras que um escritor faz valer: uma spec nunca referencia a si mesma; toda ref
 (`doctor` aponta a que não existe); uma spec `superseded` é citada em `supersedes` de pelo menos
 uma outra spec, ou `doctor` a aponta como órfã. Estado de task nunca move uma spec: isso é uma
 decisão.
+
+## 12. Projeto
+
+`project.md` é a primeira coisa que um agente lê. O corpo é prosa; o front matter é o que as
+ferramentas consomem.
+
+| Campo | Obrigatório | Significado |
+|---|---|---|
+| `name` | sim | o projeto |
+| `description` | não | uma linha |
+| `default_agent` | não | o agente que uma task sem `agent` recebe |
+| `verify` | não | comandos que toda task roda além dos próprios checks |
+| `limits` | não | um mapa de limiares numéricos, abaixo |
+| `paused` | não | `true` para a fila: `next` não responde nada e diz por quê |
+| `pause_reason` | não | texto livre; `breaker:<limite>` quando um control plane disparou por um limite |
+| `paused_at` | não | RFC 3339 UTC; obrigatório quando `paused` |
+
+`limits` é o envelope do projeto. O protocolo nomeia três chaves e carrega qualquer outra:
+
+| Chave | Significado |
+|---|---|
+| `max_cost_per_hour` | na moeda da evidência (§5) |
+| `max_failure_rate` | uma fração, 0..1, sobre as últimas execuções |
+| `max_repeated_failure_class` | o mesmo `failure_class` tantas vezes seguidas |
+
+O protocolo *carrega* limites e pausa; fazê-los valer — recusar iniciar uma task, parar uma
+tentativa em curso, disparar o disjuntor — é trabalho do runner e do control plane, como com os
+manifestos de agente (§7). O pacote de contexto (§6) inclui `limits` e a pausa, para o agente
+conhecer seu envelope. Todo leitor pode ignorar todos esses campos.

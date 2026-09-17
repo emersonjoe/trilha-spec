@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/emersonjoe/trilha-spec/agent"
@@ -111,6 +112,17 @@ func (p *Pack) Markdown() string {
 		}
 		if p.Project.Body != "" {
 			b.WriteString(strings.TrimSpace(p.Project.Body) + "\n\n")
+		}
+		// The envelope the agent works inside; the runner enforces it.
+		if len(p.Project.Limits) > 0 {
+			b.WriteString("### Limits\n\n")
+			for _, k := range spec.SortedKeys(p.Project.Limits) {
+				fmt.Fprintf(&b, "- %s: %s\n", k, strconv.FormatFloat(p.Project.Limits[k], 'f', -1, 64))
+			}
+			b.WriteString("\n")
+		}
+		if p.Project.Paused {
+			fmt.Fprintf(&b, "**The project is paused**: %s (since %s). Do not start work.\n\n", p.Project.PauseReason, p.Project.PausedAt)
 		}
 	}
 	if p.Constitution != "" {

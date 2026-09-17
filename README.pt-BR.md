@@ -73,6 +73,8 @@ trilha-spec task add "Config do provedor" --spec 001-login-oauth --status ready 
     --accept "config carrega" --check "go test ./internal/oauth/..." \
     --body "Lê config.yaml; falha alto quando falta chave."   # ou --body-file CAMINHO (- lê stdin)
 trilha-spec task next                          # o que pode rodar agora
+trilha-spec project limit max_cost_per_hour 5  # limits: no project.md; o runner faz valer
+trilha-spec project pause --reason "breaker:max_cost_per_hour"   # next não responde e diz por quê
 trilha-spec context TASK-001                   # o pacote que um agente recebe
 trilha-spec task move TASK-001 running
 trilha-spec task move TASK-001 verify

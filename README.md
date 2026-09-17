@@ -77,6 +77,8 @@ trilha-spec task add "Provider config" --spec 001-oauth-login --status ready \
 trilha-spec task add "Login page" --depends TASK-001 --status ready --accept "login works" \
     --body "The page posts to /login; errors stay on the page."   # or --body-file PATH (- for stdin)
 trilha-spec task next                          # what can run now
+trilha-spec project limit max_cost_per_hour 5  # limits: in project.md; the runner enforces them
+trilha-spec project pause --reason "breaker:max_cost_per_hour"   # next answers nothing and says why
 trilha-spec context TASK-001                   # the pack an agent receives
 trilha-spec task move TASK-001 running
 trilha-spec task move TASK-001 verify

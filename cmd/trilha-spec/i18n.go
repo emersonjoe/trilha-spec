@@ -70,6 +70,7 @@ uso: trilha-spec <comando> [flags]
            [--body TEXTO | --body-file CAMINHO]   (CAMINHO "-" lê stdin)
   task list [--status S] | show <id> | next | move <id> <status> | graph [--dot]
   agent list | show <nome>
+  project show | pause [--reason R] | resume | limit <chave> <valor|->
   context <task-id>             o pacote de contexto que um agente recebe (--json para ferramentas)
   verify <task-id> [--dir D]    roda os checks da task e grava evidência
   evidence <task-id> [add --note TEXTO]
@@ -118,6 +119,14 @@ var pt = map[string]string{
 	"usage: trilha-spec agent list | show <name>": "uso: trilha-spec agent list | show <nome>",
 	"usage: trilha-spec agent show <name>":        "uso: trilha-spec agent show <nome>",
 	"unknown agent command %q":                    "subcomando de agent desconhecido %q",
+	// project
+	"usage: trilha-spec project show | pause [--reason R] | resume | limit <key> <value|->": "uso: trilha-spec project show | pause [--reason R] | resume | limit <chave> <valor|->",
+	"usage: trilha-spec project limit <key> <value|->":                                      "uso: trilha-spec project limit <chave> <valor|->",
+	"project is paused: %s\n":      "projeto pausado: %s\n",
+	"%s is paused: %s\n":           "%s está pausado: %s\n",
+	"%s resumed\n":                 "%s retomado\n",
+	"limit %s: %q is not a number": "limite %s: %q não é um número",
+	"unknown project command %q":   "subcomando de project desconhecido %q",
 	// context, verify, evidence
 	"usage: trilha-spec context <task-id>":                    "uso: trilha-spec context <task-id>",
 	"usage: trilha-spec verify <task-id> [--dir D]":           "uso: trilha-spec verify <task-id> [--dir D]",

@@ -341,3 +341,99 @@ func TestSpecSecurityImpact(t *testing.T) {
 		t.Fatalf("empty item accepted: %v", err)
 	}
 }
+
+func TestMapFields(t *testing.T) {
+	src := "---\nname: demo\nlimits:\n  max_cost_per_hour: 5.00\n  max_failure_rate: 0.5\nverify:\n  - go vet ./...\nempty: {}\n---\n"
+	d, err := Parse([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := d.Fields.GetMap("limits")
+	if len(m) != 2 || m["max_cost_per_hour"] != "5.00" || m["max_failure_rate"] != "0.5" {
+		t.Fatalf("limits = %v", m)
+	}
+	if d.Fields.Get("limits") != "" || d.Fields.GetList("limits") != nil {
+		t.Fatal("a map is neither a scalar nor a list")
+	}
+	if got := d.Fields.GetList("verify"); len(got) != 1 {
+		t.Fatalf("verify = %v", got)
+	}
+	if got := d.Fields.GetMap("empty"); got == nil || len(got) != 0 {
+		t.Fatalf("empty map = %v", got)
+	}
+	if string(d.Bytes()) != src {
+		t.Fatalf("not stable:\n%s\n---\n%s", src, d.Bytes())
+	}
+	if got := d.Fields.Map()["limits"].(map[string]string); got["max_failure_rate"] != "0.5" {
+		t.Fatalf("Map() = %v", got)
+	}
+	// A list item under a map is an error; a map entry under a filled list is a new key.
+	if _, err := Parse([]byte("---\nlimits:\n  a: 1\n  - x\n---\n")); err == nil {
+		t.Fatal("list item under a map accepted")
+	}
+	d2, err := Parse([]byte("---\nverify:\n  - a\n  b: c\n---\n"))
+	if err != nil || d2.Fields.Get("b") != "c" || len(d2.Fields.GetList("verify")) != 1 {
+		t.Fatalf("indented key after a filled list: %v %+v", err, d2)
+	}
+	var f Fields
+	f.SetMap("limits", map[string]string{"z": "1", "a": "2"})
+	if got := (&Doc{Fields: f}).Bytes(); string(got) != "---\nlimits:\n  a: 2\n  z: 1\n---\n" {
+		t.Fatalf("SetMap sorted:\n%s", got)
+	}
+}
+
+func TestProjectLimitsAndPause(t *testing.T) {
+	l, _, err := Init(t.TempDir(), InitOptions{Name: "demo", Description: "a demo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := l.LoadProject()
+	if err != nil || p.Limits != nil || p.Paused {
+		t.Fatalf("fresh project: %v %+v", err, p)
+	}
+	p.Limits = map[string]float64{LimitMaxCostPerHour: 5, LimitMaxRepeatedFailureClass: 3, "custom": 0.25}
+	p.Pause("breaker:max_repeated_failure_class")
+	if err := l.SaveProject(p); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(l.Project())
+	for _, want := range []string{"name: demo\n", "description: a demo\n", "default_agent: coder\n", "verify: []\n", "limits:\n  custom: 0.25\n  max_cost_per_hour: 5\n  max_repeated_failure_class: 3\n", "paused: true\n", "pause_reason: \"breaker:max_repeated_failure_class\"\n", "paused_at: \"20"} {
+		if !strings.Contains(string(b), want) {
+			t.Fatalf("written lacks %q:\n%s", want, b)
+		}
+	}
+	if !strings.Contains(string(b), "## ") {
+		t.Fatalf("body lost:\n%s", b)
+	}
+	again, err := l.LoadProject()
+	if err != nil || !again.Paused || again.PauseReason != "breaker:max_repeated_failure_class" || again.Limits["custom"] != 0.25 || again.Limits[LimitMaxCostPerHour] != 5 {
+		t.Fatalf("round trip: %v %+v", err, again)
+	}
+	again.Resume()
+	again.Limits = nil
+	l.SaveProject(again)
+	b, _ = os.ReadFile(l.Project())
+	if strings.Contains(string(b), "paused") || strings.Contains(string(b), "limits") {
+		t.Fatalf("resume left state:\n%s", b)
+	}
+	// What a reader refuses.
+	if _, err := ParseProject([]byte("---\nname: x\nlimits:\n  max_cost_per_hour: five\n---\n")); err == nil || !strings.Contains(err.Error(), `limits.max_cost_per_hour "five" is not a number`) {
+		t.Fatalf("text limit: %v", err)
+	}
+	bad := &Project{Name: "x", Limits: map[string]float64{LimitMaxFailureRate: 2, "n": -1}, Paused: true}
+	err = bad.Validate()
+	for _, want := range []string{"max_failure_rate is a share", "limits.n must not be negative", "paused without paused_at"} {
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("validate lacks %q: %v", want, err)
+		}
+	}
+	// Unknown keys survive a save: the file belongs to more tools than this one.
+	os.WriteFile(l.Project(), []byte("---\nname: x\nowner: ops\nlimits:\n  max_cost_per_hour: 1\n---\n\nbody\n"), 0o644)
+	p, _ = l.LoadProject()
+	p.Pause("manual")
+	l.SaveProject(p)
+	b, _ = os.ReadFile(l.Project())
+	if !strings.Contains(string(b), "owner: ops\n") || !strings.Contains(string(b), "limits:\n  max_cost_per_hour: 1\n") || !strings.HasSuffix(string(b), "\nbody\n") {
+		t.Fatalf("save lost fields:\n%s", b)
+	}
+}

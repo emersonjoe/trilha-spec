@@ -58,8 +58,11 @@ func Tools(l spec.Layout, write bool) []*Tool {
 		},
 		{
 			Name:        "trilha_next",
-			Description: "Answer the tasks that can be picked up now: status ready with every dependency done, in dependency order.",
+			Description: "Answer the tasks that can be picked up now: status ready with every dependency done, in dependency order. A paused project answers an error with the pause reason.",
 			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+				if p, err := l.LoadProject(); err == nil && p.Paused {
+					return "", fmt.Errorf("project is paused: %s (since %s)", p.PauseReason, p.PausedAt)
+				}
 				g, err := st.Graph()
 				if err != nil {
 					return "", err

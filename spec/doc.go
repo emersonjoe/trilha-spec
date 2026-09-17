@@ -22,19 +22,26 @@ type Doc struct {
 	Body   string
 }
 
-// Fields is an ordered set of front matter entries. A value is a scalar or a
-// list of scalars; that is the whole grammar, and it is enough to describe a
-// task without pulling a YAML library into every reader.
+// Fields is an ordered set of front matter entries. A value is a scalar, a
+// list of scalars or a map of scalars one level deep; that is the whole
+// grammar, and it is enough to describe a task without pulling a YAML
+// library into every reader.
 type Fields struct {
 	order []string
 	vals  map[string]Value
 }
 
-// Value is one front matter entry.
+// Value is one front matter entry. Exactly one of the three shapes holds:
+// IsMap wins over IsList, IsList over the scalar.
 type Value struct {
 	Scalar string
 	List   []string
 	IsList bool
+	// Map is a one-level map of scalars (`limits:` in project.md), with its
+	// keys in document order.
+	Map     map[string]string
+	MapKeys []string
+	IsMap   bool
 }
 
 // ErrNoFrontMatter is a document that does not start with the `---` fence.
@@ -50,6 +57,29 @@ func (f *Fields) SetList(key string, items []string) {
 	f.put(key, Value{List: append([]string(nil), items...), IsList: true})
 }
 
+// SetMap writes a map of scalars, keys sorted, keeping the position of an
+// existing key.
+func (f *Fields) SetMap(key string, m map[string]string) {
+	v := Value{IsMap: true, Map: map[string]string{}, MapKeys: SortedKeys(m)}
+	for k, x := range m {
+		v.Map[k] = x
+	}
+	f.put(key, v)
+}
+
+// GetMap answers the map for key, or nil when absent or not a map.
+func (f Fields) GetMap(key string) map[string]string {
+	v, ok := f.vals[key]
+	if !ok || !v.IsMap {
+		return nil
+	}
+	m := make(map[string]string, len(v.Map))
+	for k, x := range v.Map {
+		m[k] = x
+	}
+	return m
+}
+
 func (f *Fields) put(key string, v Value) {
 	if f.vals == nil {
 		f.vals = map[string]Value{}
@@ -60,9 +90,9 @@ func (f *Fields) put(key string, v Value) {
 	f.vals[key] = v
 }
 
-// Get answers the scalar for key, or "" when absent or a list.
+// Get answers the scalar for key, or "" when absent, a list or a map.
 func (f Fields) Get(key string) string {
-	if v, ok := f.vals[key]; ok && !v.IsList {
+	if v, ok := f.vals[key]; ok && !v.IsList && !v.IsMap {
 		return v.Scalar
 	}
 	return ""
@@ -72,7 +102,7 @@ func (f Fields) Get(key string) string {
 // task with a single dependency may write `depends_on: TASK-1`.
 func (f Fields) GetList(key string) []string {
 	v, ok := f.vals[key]
-	if !ok {
+	if !ok || v.IsMap {
 		return nil
 	}
 	if v.IsList {
@@ -104,15 +134,18 @@ func (f *Fields) Delete(key string) {
 // Keys answers the keys in document order.
 func (f Fields) Keys() []string { return append([]string(nil), f.order...) }
 
-// Map answers the fields as a plain map, lists as []string and scalars as
-// string: the JSON shape of a document.
+// Map answers the fields as a plain map, lists as []string, maps as
+// map[string]string and scalars as string: the JSON shape of a document.
 func (f Fields) Map() map[string]any {
 	m := make(map[string]any, len(f.order))
 	for _, k := range f.order {
 		v := f.vals[k]
-		if v.IsList {
+		switch {
+		case v.IsMap:
+			m[k] = v.Map
+		case v.IsList:
 			m[k] = v.List
-		} else {
+		default:
 			m[k] = v.Scalar
 		}
 	}
@@ -126,6 +159,9 @@ func (f Fields) Map() map[string]any {
 //	key: [a, b]         an inline list
 //	key:                a list, one `- item` per following line
 //	  - item
+//	key:                a map of scalars, one indented `sub: value` per line
+//	  sub: value
+//	key: {}             an empty map
 //	# comment           ignored, as is a blank line
 //
 // A document without front matter fails with ErrNoFrontMatter.
@@ -151,7 +187,7 @@ func Parse(src []byte) (*Doc, error) {
 			continue
 		}
 		if strings.HasPrefix(t, "- ") || t == "-" {
-			if listKey == "" {
+			if listKey == "" || d.Fields.vals[listKey].IsMap {
 				return nil, fmt.Errorf("spec: line %d: list item without a key", line)
 			}
 			v := d.Fields.vals[listKey]
@@ -164,10 +200,29 @@ func Parse(src []byte) (*Doc, error) {
 			return nil, fmt.Errorf("spec: line %d: expected `key: value`, got %q", line, t)
 		}
 		val = strings.TrimSpace(val)
+		// An indented `sub: value` right after `key:` (or after another
+		// entry of the same map) is a map entry, not a top-level key.
+		if raw != t && listKey != "" {
+			v := d.Fields.vals[listKey]
+			if v.IsMap || (v.IsList && len(v.List) == 0) {
+				if !v.IsMap {
+					v = Value{IsMap: true, Map: map[string]string{}}
+				}
+				if _, dup := v.Map[key]; !dup {
+					v.MapKeys = append(v.MapKeys, key)
+				}
+				v.Map[key] = unquote(val)
+				d.Fields.vals[listKey] = v
+				continue
+			}
+		}
 		switch {
 		case val == "":
 			listKey = key
 			d.Fields.put(key, Value{IsList: true, List: []string{}})
+		case val == "{}":
+			listKey = ""
+			d.Fields.put(key, Value{IsMap: true, Map: map[string]string{}})
 		case strings.HasPrefix(val, "[") && strings.HasSuffix(val, "]"):
 			listKey = ""
 			var items []string
@@ -243,6 +298,17 @@ func (d *Doc) Bytes() []byte {
 	b.WriteString("---\n")
 	for _, k := range d.Fields.order {
 		v := d.Fields.vals[k]
+		if v.IsMap {
+			if len(v.MapKeys) == 0 {
+				fmt.Fprintf(&b, "%s: {}\n", k)
+				continue
+			}
+			fmt.Fprintf(&b, "%s:\n", k)
+			for _, sub := range v.MapKeys {
+				fmt.Fprintf(&b, "  %s: %s\n", sub, quote(v.Map[sub]))
+			}
+			continue
+		}
 		if v.IsList {
 			if len(v.List) == 0 {
 				fmt.Fprintf(&b, "%s: []\n", k)

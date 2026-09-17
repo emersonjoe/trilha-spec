@@ -11,7 +11,7 @@ speaks the protocol.
 ```
 .trilha/
 ├── .gitignore        runs/ and the framework's build cache; everything else is committed
-├── project.md        Document: name, description, default_agent, verify[]
+├── project.md        Document: see §12
 ├── constitution.md   Markdown, free form
 ├── specs/NNN-name.md Document: see §11
 ├── tasks/TASK-NNN.md Document: see §3
@@ -35,13 +35,16 @@ key: [a, b]
 key:
   - item
   - item
+key:
+  sub: scalar
+  sub: scalar
 ---
 
 Body, free Markdown.
 ```
 
-The grammar is deliberately a subset of YAML: scalars, lists of scalars, `#` comments and
-blank lines. Inside double quotes, `\"` and `\\` are the only escapes; single quotes carry text
+The grammar is deliberately a subset of YAML: scalars, lists of scalars, maps of scalars one
+level deep (`key: {}` is an empty map), `#` comments and blank lines. Inside double quotes, `\"` and `\\` are the only escapes; single quotes carry text
 as is. A key a reader does not know is preserved on write. Field order is stable: protocol
 fields first, in the order below, then unknown fields in the order read.
 
@@ -140,7 +143,7 @@ capability `tools` only.
 |---|---|---|
 | `trilha_list_tasks` | | `status?` |
 | `trilha_get_task` | | `id` |
-| `trilha_next` | | |
+| `trilha_next` | | — ; a paused project (§12) answers an error with the reason |
 | `trilha_context` | | `id`, `format?` (markdown \| json) |
 | `trilha_list_specs` | | `status?` |
 | `trilha_graph` | | |
@@ -200,3 +203,32 @@ written; `approved` is agreed and tasks may be cut from it; `done` has every tas
 Rules a writer enforces: a spec never references itself; every reference exists (`doctor`
 reports one that does not); a `superseded` spec is named in `supersedes` of at least one other
 spec, or `doctor` reports it as an orphan. Task states never move a spec: that is a decision.
+
+## 12. Project
+
+`project.md` is the first thing an agent reads. Its body is prose; its front matter is what
+tools consume.
+
+| Field | Required | Meaning |
+|---|---|---|
+| `name` | yes | the project |
+| `description` | no | one line |
+| `default_agent` | no | the agent a task without `agent` gets |
+| `verify` | no | commands every task runs on top of its own checks |
+| `limits` | no | a map of numeric thresholds, below |
+| `paused` | no | `true` stops the queue: `next` answers nothing and says why |
+| `pause_reason` | no | free text; `breaker:<limit>` when a control plane tripped on a limit |
+| `paused_at` | no | RFC 3339 UTC; required when `paused` |
+
+`limits` is the project's envelope. The protocol names three keys and carries any other:
+
+| Key | Meaning |
+|---|---|
+| `max_cost_per_hour` | in the currency of the evidence (§5) |
+| `max_failure_rate` | a share, 0..1, over the last runs |
+| `max_repeated_failure_class` | the same `failure_class` this many times in a row |
+
+The protocol *carries* limits and pause; enforcing them — refusing to start a task, stopping a
+running attempt, tripping the breaker — is the runner's and the control plane's job, as with
+agent manifests (§7). The context pack (§6) includes `limits` and the pause, so an agent knows
+its envelope. Every reader may ignore all of these fields.
