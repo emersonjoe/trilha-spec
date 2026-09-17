@@ -179,6 +179,11 @@ func (p *Pack) Markdown() string {
 			switch {
 			case e.Command != "":
 				fmt.Fprintf(&b, "`%s` exit %d", e.Command, e.ExitCode)
+			case e.Kind == "run" && e.Cost != 0:
+				fmt.Fprintf(&b, "%s %s %s", e.Model, strconv.FormatFloat(e.Cost, 'f', -1, 64), e.Currency)
+				if e.Note != "" {
+					b.WriteString(" — " + e.Note)
+				}
 			case e.Note != "":
 				b.WriteString(e.Note)
 			}

@@ -1,0 +1,10 @@
+{
+  "task": "TASK-012",
+  "seq": 3,
+  "kind": "note",
+  "at": "2026-09-17T21:55:59Z",
+  "by": "claude-opus-5",
+  "exit_code": 0,
+  "passed": true,
+  "note": "provider/model/tokens_in/tokens_out/cost/currency on run evidence and on execution Attempt; evidence add --run; protocol §5/§10, README and chapter in both locales"
+}

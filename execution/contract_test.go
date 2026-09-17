@@ -21,6 +21,10 @@ func TestCanonicalFixture(t *testing.T) {
 	if run.Result == nil || !run.Result.Passed || len(run.Attempts) != 2 {
 		t.Fatalf("fixture lost execution detail: %+v", run)
 	}
+	// Cost travels under the names a run evidence record uses.
+	if a := run.Attempts[1]; a.Provider != "openai" || a.TokensIn != 2400 || a.TokensOut != 600 || a.Cost != 0.0421 || a.Currency != "USD" {
+		t.Fatalf("fixture lost cost: %+v", a)
+	}
 }
 
 func TestValidRunID(t *testing.T) {

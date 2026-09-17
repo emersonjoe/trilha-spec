@@ -43,7 +43,7 @@ usage: trilha-spec <command> [flags]
   project show | pause [--reason R] | resume | limit <key> <value|->
   context <task-id>             the context pack an agent receives (--json for tools)
   verify <task-id> [--dir D]    run the task's checks and record evidence
-  evidence <task-id> [add --note TEXT]
+  evidence <task-id> [add --note TEXT | add --run --provider P --model M --tokens-in N --tokens-out N --cost C --currency USD]
   mcp [--write]                 serve the protocol over MCP on stdio
   doctor                        what a reader would trip on
   version
@@ -592,7 +592,7 @@ func cmdVerify(args []string, out io.Writer) error {
 
 func cmdEvidence(args []string, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New(T("usage: trilha-spec evidence <task-id> [add --note TEXT]"))
+		return errors.New(T("usage: trilha-spec evidence <task-id> [add --note TEXT | add --run [--provider P] [--model M] [--tokens-in N] [--tokens-out N] [--cost C --currency USD] [--failed]]"))
 	}
 	st, err := store()
 	if err != nil {
@@ -605,17 +605,29 @@ func cmdEvidence(args []string, out io.Writer) error {
 		by := fs.String("by", "cli", "author")
 		var files multi
 		fs.Var(&files, "file", "file produced (repeatable)")
+		run := fs.Bool("run", false, "a runner's execution record, with its cost")
+		provider := fs.String("provider", "", "model provider (run)")
+		model := fs.String("model", "", "model (run)")
+		tokensIn := fs.Int("tokens-in", 0, "input tokens (run)")
+		tokensOut := fs.Int("tokens-out", 0, "output tokens (run)")
+		cost := fs.Float64("cost", 0, "cost as observed (run)")
+		currency := fs.String("currency", "", "ISO 4217 code of --cost (run)")
+		failed := fs.Bool("failed", false, "the run did not pass")
 		if err := fs.Parse(args[2:]); err != nil {
 			return err
 		}
-		if *note == "" && len(files) == 0 {
-			return errors.New(T("evidence add needs --note or --file"))
+		if *note == "" && len(files) == 0 && !*run {
+			return errors.New(T("evidence add needs --note, --file or --run"))
 		}
 		kind := "note"
-		if len(files) > 0 {
+		switch {
+		case *run:
+			kind = "run"
+		case len(files) > 0:
 			kind = "artifact"
 		}
-		e, p, err := task.Record(st.Layout, task.Evidence{Task: id, Kind: kind, Note: *note, Files: files, By: *by, Passed: true})
+		e, p, err := task.Record(st.Layout, task.Evidence{Task: id, Kind: kind, Note: *note, Files: files, By: *by, Passed: !*failed,
+			Provider: *provider, Model: *model, TokensIn: *tokensIn, TokensOut: *tokensOut, Cost: *cost, Currency: *currency})
 		if err != nil {
 			return err
 		}
@@ -643,8 +655,11 @@ func cmdEvidence(args []string, out io.Writer) error {
 			mark = "✓"
 		}
 		what := e.Note
-		if e.Command != "" {
+		switch {
+		case e.Command != "":
 			what = fmt.Sprintf("%s (exit %d)", e.Command, e.ExitCode)
+		case e.Kind == "run" && (e.Model != "" || e.Cost != 0):
+			what = runSummary(e) + " " + e.Note
 		}
 		fmt.Fprintf(out, "#%-3d %s %-8s %-20s %s\n", e.Seq, mark, e.Kind, e.By, what)
 	}
@@ -747,6 +762,21 @@ func cmdProject(args []string, out io.Writer) error {
 		return nil
 	}
 	return fmt.Errorf(T("unknown project command %q"), args[0])
+}
+
+// runSummary is a run's cost in one glance: `anthropic/claude-sonnet-5 12345+678 tokens 0.0421 USD`.
+func runSummary(e task.Evidence) string {
+	var parts []string
+	if e.Provider != "" || e.Model != "" {
+		parts = append(parts, strings.TrimPrefix(e.Provider+"/"+e.Model, "/"))
+	}
+	if e.TokensIn != 0 || e.TokensOut != 0 {
+		parts = append(parts, fmt.Sprintf("%d+%d tokens", e.TokensIn, e.TokensOut))
+	}
+	if e.Cost != 0 {
+		parts = append(parts, strconv.FormatFloat(e.Cost, 'f', -1, 64)+" "+e.Currency)
+	}
+	return strings.Join(parts, " ")
 }
 
 func cmdDoctor(args []string, out io.Writer) error {

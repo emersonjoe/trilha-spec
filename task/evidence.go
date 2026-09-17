@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -36,12 +37,39 @@ type Evidence struct {
 	// Output is what the command printed, capped at MaxOutput; OutputSHA256
 	// is the hash of the whole of it, so a trimmed record still proves what
 	// ran.
-	Output       string            `json:"output,omitempty"`
-	OutputSHA256 string            `json:"output_sha256,omitempty"`
-	Passed       bool              `json:"passed"`
-	Note         string            `json:"note,omitempty"`
-	Files        []string          `json:"files,omitempty"`
-	Meta         map[string]string `json:"meta,omitempty"`
+	Output       string   `json:"output,omitempty"`
+	OutputSHA256 string   `json:"output_sha256,omitempty"`
+	Passed       bool     `json:"passed"`
+	Note         string   `json:"note,omitempty"`
+	Files        []string `json:"files,omitempty"`
+	// Cost of a `run`, as the runner observed it — the protocol does not
+	// claim it is verified; reconciling it against a provider's invoice is a
+	// control plane's job. The same names are on an execution Attempt.
+	Provider  string  `json:"provider,omitempty"`
+	Model     string  `json:"model,omitempty"`
+	TokensIn  int     `json:"tokens_in,omitempty"`
+	TokensOut int     `json:"tokens_out,omitempty"`
+	Cost      float64 `json:"cost,omitempty"`
+	// Currency is ISO 4217 (`USD`); required when Cost is set.
+	Currency string            `json:"currency,omitempty"`
+	Meta     map[string]string `json:"meta,omitempty"`
+}
+
+var reCurrency = regexp.MustCompile(`^[A-Z]{3}$`)
+
+// validateCost checks the cost fields any kind may carry.
+func (e Evidence) validateCost() error {
+	switch {
+	case e.TokensIn < 0 || e.TokensOut < 0:
+		return errors.New("evidence: tokens must not be negative")
+	case e.Cost < 0:
+		return errors.New("evidence: cost must not be negative")
+	case e.Cost != 0 && e.Currency == "":
+		return errors.New("evidence: cost needs a currency")
+	case e.Currency != "" && !reCurrency.MatchString(e.Currency):
+		return fmt.Errorf("evidence: currency %q is not an ISO 4217 code", e.Currency)
+	}
+	return nil
 }
 
 // MaxOutput is how much of a command's output an evidence record keeps.
@@ -59,6 +87,9 @@ func Record(l spec.Layout, e Evidence) (Evidence, string, error) {
 	}
 	if e.Kind == "" {
 		return e, "", errors.New("evidence: kind is required")
+	}
+	if err := e.validateCost(); err != nil {
+		return e, "", err
 	}
 	dir := l.EvidenceDir(e.Task)
 	if err := os.MkdirAll(dir, 0o755); err != nil {

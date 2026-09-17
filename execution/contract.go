@@ -76,17 +76,24 @@ type Event struct {
 }
 
 type Attempt struct {
-	Number        int       `json:"number"`
-	Status        string    `json:"status"`
-	FailureClass  string    `json:"failure_class,omitempty"`
-	ErrorCode     string    `json:"error_code,omitempty"`
-	Message       string    `json:"message,omitempty"`
-	RepairReason  string    `json:"repair_reason,omitempty"`
-	Model         string    `json:"model,omitempty"`
-	TotalTokens   int       `json:"total_tokens,omitempty"`
-	EstimatedCost float64   `json:"estimated_cost,omitempty"`
-	Started       time.Time `json:"started"`
-	Finished      time.Time `json:"finished,omitempty"`
+	Number        int     `json:"number"`
+	Status        string  `json:"status"`
+	FailureClass  string  `json:"failure_class,omitempty"`
+	ErrorCode     string  `json:"error_code,omitempty"`
+	Message       string  `json:"message,omitempty"`
+	RepairReason  string  `json:"repair_reason,omitempty"`
+	Model         string  `json:"model,omitempty"`
+	TotalTokens   int     `json:"total_tokens,omitempty"`
+	EstimatedCost float64 `json:"estimated_cost,omitempty"`
+	// Cost as observed, with the names a `run` evidence record uses (§5),
+	// so a ledger reads the same fields from a runner and from .trilha/.
+	Provider  string    `json:"provider,omitempty"`
+	TokensIn  int       `json:"tokens_in,omitempty"`
+	TokensOut int       `json:"tokens_out,omitempty"`
+	Cost      float64   `json:"cost,omitempty"`
+	Currency  string    `json:"currency,omitempty"`
+	Started   time.Time `json:"started"`
+	Finished  time.Time `json:"finished,omitempty"`
 }
 
 type Evidence struct {
@@ -97,6 +104,12 @@ type Evidence struct {
 	ExitCode   int               `json:"exit_code,omitempty"`
 	Passed     bool              `json:"passed"`
 	Files      []string          `json:"files,omitempty"`
+	Provider   string            `json:"provider,omitempty"`
+	Model      string            `json:"model,omitempty"`
+	TokensIn   int               `json:"tokens_in,omitempty"`
+	TokensOut  int               `json:"tokens_out,omitempty"`
+	Cost       float64           `json:"cost,omitempty"`
+	Currency   string            `json:"currency,omitempty"`
 	Meta       map[string]string `json:"meta,omitempty"`
 	OutputHash string            `json:"output_sha256,omitempty"`
 }

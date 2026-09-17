@@ -157,6 +157,41 @@ func TestSplitCommand(t *testing.T) {
 	}
 }
 
+func TestRunEvidenceCost(t *testing.T) {
+	s := newStore(t)
+	tk, _ := s.Create("Run", func(x *Task) { x.Acceptance = []string{"x"} })
+	e, p, err := Record(s.Layout, Evidence{Task: tk.ID, Kind: "run", By: "runner", Passed: true,
+		Provider: "anthropic", Model: "claude-sonnet-5", TokensIn: 12345, TokensOut: 678, Cost: 0.0421, Currency: "USD", Meta: map[string]string{"run": "run-000001"}})
+	if err != nil || !strings.HasSuffix(p, "001-run.json") {
+		t.Fatalf("%v %s", err, p)
+	}
+	b, _ := os.ReadFile(p)
+	for _, want := range []string{`"provider": "anthropic"`, `"model": "claude-sonnet-5"`, `"tokens_in": 12345`, `"tokens_out": 678`, `"cost": 0.0421`, `"currency": "USD"`, `"meta"`} {
+		if !strings.Contains(string(b), want) {
+			t.Fatalf("record lacks %s:\n%s", want, b)
+		}
+	}
+	list, _ := ListEvidence(s.Layout, tk.ID)
+	if list[0].Cost != e.Cost || list[0].TokensIn != 12345 {
+		t.Fatalf("round trip: %+v", list[0])
+	}
+	// A note carries none of it, so the fields stay off the file.
+	_, p, _ = Record(s.Layout, Evidence{Task: tk.ID, Kind: "note", By: "me", Note: "hi", Passed: true})
+	if b, _ := os.ReadFile(p); strings.Contains(string(b), "tokens") || strings.Contains(string(b), "cost") {
+		t.Fatalf("note carries cost:\n%s", b)
+	}
+	for _, bad := range []Evidence{
+		{Task: tk.ID, Kind: "run", Cost: 1},
+		{Task: tk.ID, Kind: "run", Cost: 1, Currency: "usd"},
+		{Task: tk.ID, Kind: "run", Cost: -1, Currency: "USD"},
+		{Task: tk.ID, Kind: "run", TokensIn: -1},
+	} {
+		if _, _, err := Record(s.Layout, bad); err == nil {
+			t.Fatalf("accepted %+v", bad)
+		}
+	}
+}
+
 func TestVerifyRecordsEvidence(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses sh")

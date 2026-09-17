@@ -80,6 +80,8 @@ trilha-spec task move TASK-001 running
 trilha-spec task move TASK-001 verify
 trilha-spec verify TASK-001                    # roda checks, grava evidência, → review ou failed
 trilha-spec evidence TASK-001
+trilha-spec evidence TASK-001 add --run --provider anthropic --model claude-sonnet-5 \
+    --tokens-in 12345 --tokens-out 678 --cost 0.0421 --currency USD   # o que um runner declara
 trilha-spec task graph                         # Mermaid; --dot para Graphviz
 trilha-spec mcp --write                        # o mesmo por MCP, para Claude Code / Cursor
 ```

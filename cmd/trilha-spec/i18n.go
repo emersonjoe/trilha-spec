@@ -73,7 +73,7 @@ uso: trilha-spec <comando> [flags]
   project show | pause [--reason R] | resume | limit <chave> <valor|->
   context <task-id>             o pacote de contexto que um agente recebe (--json para ferramentas)
   verify <task-id> [--dir D]    roda os checks da task e grava evidência
-  evidence <task-id> [add --note TEXTO]
+  evidence <task-id> [add --note TEXTO | add --run --provider P --model M --tokens-in N --tokens-out N --cost C --currency USD]
   mcp [--write]                 serve o protocolo por MCP em stdio
   doctor                        o que um leitor tropeçaria
   version
@@ -128,13 +128,13 @@ var pt = map[string]string{
 	"limit %s: %q is not a number": "limite %s: %q não é um número",
 	"unknown project command %q":   "subcomando de project desconhecido %q",
 	// context, verify, evidence
-	"usage: trilha-spec context <task-id>":                    "uso: trilha-spec context <task-id>",
-	"usage: trilha-spec verify <task-id> [--dir D]":           "uso: trilha-spec verify <task-id> [--dir D]",
-	"evidence: %d record(s) in %s\n":                          "evidência: %d registro(s) em %s\n",
-	"verification failed":                                     "verificação falhou",
-	"usage: trilha-spec evidence <task-id> [add --note TEXT]": "uso: trilha-spec evidence <task-id> [add --note TEXTO]",
-	"evidence add needs --note or --file":                     "evidence add precisa de --note ou --file",
-	"recorded #%d (%s)\n":                                     "gravado #%d (%s)\n",
+	"usage: trilha-spec context <task-id>":          "uso: trilha-spec context <task-id>",
+	"usage: trilha-spec verify <task-id> [--dir D]": "uso: trilha-spec verify <task-id> [--dir D]",
+	"evidence: %d record(s) in %s\n":                "evidência: %d registro(s) em %s\n",
+	"verification failed":                           "verificação falhou",
+	"usage: trilha-spec evidence <task-id> [add --note TEXT | add --run [--provider P] [--model M] [--tokens-in N] [--tokens-out N] [--cost C --currency USD] [--failed]]": "uso: trilha-spec evidence <task-id> [add --note TEXTO | add --run [--provider P] [--model M] [--tokens-in N] [--tokens-out N] [--cost C --currency USD] [--failed]]",
+	"evidence add needs --note, --file or --run": "evidence add precisa de --note, --file ou --run",
+	"recorded #%d (%s)\n":                        "gravado #%d (%s)\n",
 	// mcp (stderr)
 	"trilha-spec mcp %s · %s\ntools: %s\n":                                              "trilha-spec mcp %s · %s\nferramentas: %s\n",
 	"read-only; pass --write to offer trilha_move, trilha_evidence and trilha_verify\n": "somente leitura; passe --write para oferecer trilha_move, trilha_evidence e trilha_verify\n",

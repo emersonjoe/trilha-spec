@@ -117,6 +117,13 @@ One JSON file per record, `evidence/TASK-NNN/NNN-kind.json`, NNN the sequence wi
 may be truncated at 64 KiB; `output_sha256` hashes the whole of it. A record is never edited;
 a correction is a new record.
 
+A `run` record may carry its **cost** in standard fields, so ledgers from different runners
+reconcile: `provider` (`anthropic`), `model` (`claude-sonnet-5`), `tokens_in`, `tokens_out`,
+`cost` and `currency` (ISO 4217, required when `cost` is set). `cost` is what the runner
+observed; the protocol does not claim it is verified — reconciling it against a provider's
+invoice is a control plane's concern, and prices per model are not in the protocol. An
+execution Attempt (§10) uses the same names.
+
 `verify` runs the task's `checks` then `project.verify`, records one `check` per command, stops
 for nothing, and answers *passed* only when every exit code is 0. A task with no checks at all
 fails verification with a `note` saying so.
@@ -165,7 +172,9 @@ kinds.
 Run transport between control planes and runners uses `trilha.execution/v1`. Its normative
 JSON Schema is `contracts/execution/v1/schema.json`; `execution/testdata/run-v1.json` is the
 canonical compatibility fixture. A Run is one logical execution of a Task and may contain
-multiple Attempts. Repair lineage uses `retry_of` with a Run ID, never a Task ID.
+multiple Attempts. Repair lineage uses `retry_of` with a Run ID, never a Task ID. An Attempt
+carries its cost under the names a `run` evidence record uses (§5): `provider`, `model`,
+`tokens_in`, `tokens_out`, `cost`, `currency`.
 
 ## 11. Specification
 

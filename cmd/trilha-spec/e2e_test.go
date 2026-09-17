@@ -332,6 +332,33 @@ func TestProjectLimitsAndPauseCLI(t *testing.T) {
 	}
 }
 
+func TestRunEvidenceCLI(t *testing.T) {
+	dir := t.TempDir()
+	must(t, dir, "init", "--name", "demo")
+	must(t, dir, "task", "add", "One", "--status", "ready", "--accept", "ok")
+	if out, err := cli(t, dir, "evidence", "TASK-001", "add", "--run", "--cost", "0.5"); err == nil || !strings.Contains(out, "cost needs a currency") {
+		t.Fatalf("cost without currency accepted:\n%s", out)
+	}
+	must(t, dir, "evidence", "TASK-001", "add", "--run", "--by", "runner", "--provider", "anthropic", "--model", "claude-sonnet-5",
+		"--tokens-in", "12345", "--tokens-out", "678", "--cost", "0.0421", "--currency", "USD", "--note", "run-000001")
+	if out := must(t, dir, "evidence", "TASK-001"); !strings.Contains(out, "run      runner               anthropic/claude-sonnet-5 12345+678 tokens 0.0421 USD run-000001") {
+		t.Fatalf("list:\n%s", out)
+	}
+	out := must(t, dir, "evidence", "TASK-001", "--json")
+	for _, want := range []string{`"kind": "run"`, `"provider": "anthropic"`, `"tokens_in": 12345`, `"tokens_out": 678`, `"cost": 0.0421`, `"currency": "USD"`} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("json lacks %s:\n%s", want, out)
+		}
+	}
+	if out := must(t, dir, "context", "TASK-001"); !strings.Contains(out, "#1 run by runner: claude-sonnet-5 0.0421 USD — run-000001") {
+		t.Fatalf("context:\n%s", out)
+	}
+	must(t, dir, "evidence", "TASK-001", "add", "--run", "--failed", "--model", "x")
+	if out := must(t, dir, "evidence", "TASK-001"); !strings.Contains(out, "#2   ✗ run") {
+		t.Fatalf("failed run:\n%s", out)
+	}
+}
+
 func TestUsage(t *testing.T) {
 	if out, err := cli(t, t.TempDir()); err == nil || !strings.Contains(out, "usage:") {
 		t.Fatalf("no args:\n%s", out)

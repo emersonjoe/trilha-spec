@@ -117,6 +117,13 @@ Um JSON por registro, `evidence/TASK-NNN/NNN-kind.json`, NNN a sequência dentro
 livre). `output` pode ser truncado em 64 KiB; `output_sha256` é o hash do todo. Um registro
 nunca é editado; correção é registro novo.
 
+Um registro `run` pode carregar seu **custo** em campos padrão, para que ledgers de runners
+diferentes conciliem: `provider` (`anthropic`), `model` (`claude-sonnet-5`), `tokens_in`,
+`tokens_out`, `cost` e `currency` (ISO 4217, obrigatório quando há `cost`). `cost` é o que o
+runner observou; o protocolo não afirma que foi verificado — conciliar com a fatura do
+provedor é assunto do control plane, e preço por modelo não está no protocolo. Uma Attempt
+do contrato de execução (§10) usa os mesmos nomes.
+
 `verify` roda os `checks` da task e depois `project.verify`, grava um `check` por comando, não
 para em falha, e responde *passou* só quando todo código de saída é 0. Task sem check nenhum
 falha a verificação com uma `note` dizendo isso.
@@ -165,7 +172,9 @@ desconhecidos.
 O transporte de Runs entre control planes e runners usa `trilha.execution/v1`. O JSON Schema
 normativo está em `contracts/execution/v1/schema.json`; `execution/testdata/run-v1.json` é o
 fixture canônico de compatibilidade. Uma Run é uma execução lógica de uma Task e pode conter
-várias Attempts. A linhagem de correção usa `retry_of` com ID de Run, nunca ID de Task.
+várias Attempts. A linhagem de correção usa `retry_of` com ID de Run, nunca ID de Task. Uma
+Attempt carrega seu custo com os nomes do registro de evidência `run` (§5): `provider`,
+`model`, `tokens_in`, `tokens_out`, `cost`, `currency`.
 
 ## 11. Especificação
 
