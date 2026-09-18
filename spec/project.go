@@ -18,6 +18,9 @@ type Project struct {
 	DefaultAgent string `json:"default_agent,omitempty"`
 	// Verify lists commands every task runs on top of its own checks.
 	Verify []string `json:"verify,omitempty"`
+	// Milestones are the dated points the programme is paid and reported
+	// against; specs and tasks name one in `milestone`.
+	Milestones []Milestone `json:"milestones,omitempty"`
 	// Limits are the project's envelope: numeric thresholds a runner reads
 	// before it starts a task and a control plane trips on. The protocol
 	// carries them; enforcing them is the runner's job, as with agent
@@ -65,6 +68,7 @@ func ParseProject(src []byte) (*Project, error) {
 		Description:  d.Fields.Get("description"),
 		DefaultAgent: d.Fields.Get("default_agent"),
 		Verify:       d.Fields.GetList("verify"),
+		Milestones:   milestonesFrom(d.Fields),
 		Paused:       d.Fields.Get("paused") == "true",
 		PauseReason:  d.Fields.Get("pause_reason"),
 		PausedAt:     d.Fields.Get("paused_at"),
@@ -102,6 +106,7 @@ func (p *Project) Validate() error {
 			errs = append(errs, "limits.max_failure_rate is a share, 0..1")
 		}
 	}
+	errs = append(errs, validateMilestones(p.Milestones)...)
 	if p.Paused && p.PausedAt == "" {
 		errs = append(errs, "paused without paused_at")
 	}
@@ -145,6 +150,11 @@ func (p *Project) Bytes() []byte {
 	}
 	if p.Verify != nil || d.Fields.Has("verify") {
 		d.Fields.SetList("verify", p.Verify)
+	}
+	if len(p.Milestones) > 0 {
+		d.Fields.SetItems("milestones", milestoneFields(p.Milestones))
+	} else {
+		d.Fields.Delete("milestones")
 	}
 	if len(p.Limits) > 0 {
 		m := make(map[string]string, len(p.Limits))

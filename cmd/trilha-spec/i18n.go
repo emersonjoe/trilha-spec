@@ -62,6 +62,12 @@ func doctorMessage(p spec.Problem) string {
 		return fmt.Sprintf(T("task covers a requirement no spec declares: %s"), p.Arg)
 	case spec.ProblemRequirementUncovered:
 		return fmt.Sprintf(T("requirement no task covers: %s"), p.Arg)
+	case spec.ProblemMilestoneUnknown:
+		return fmt.Sprintf(T("milestone project.md does not declare: %s"), p.Arg)
+	case spec.ProblemMilestoneEmpty:
+		return fmt.Sprintf(T("milestone %s has no task"), p.Arg)
+	case spec.ProblemMilestonePastDue:
+		return fmt.Sprintf(T("task past its milestone's due date: %s"), p.Arg)
 	}
 	return p.String()
 }
@@ -74,11 +80,12 @@ uso: trilha-spec <comando> [flags]
   spec new <título> [--issue N] [--body TEXTO | --body-file CAMINHO] [--asset A]... [--boundary B]... [--control C]... [--evidence CMD]...
   spec list [--status S] | show <id> [--coverage] | move <id> <status>
   spec set <id> [--issue N] [--supersedes A,B] [--depends A,B] [--asset A]... [--boundary B]... [--control C]... [--evidence CMD]...
-  task add <título> [--spec ID] [--depends A,B] [--agent N] [--status S] [--covers R,S] [--accept C]... [--check CMD]...
+  task add <título> [--spec ID] [--depends A,B] [--agent N] [--status S] [--covers R,S] [--milestone M] [--accept C]... [--check CMD]...
            [--body TEXTO | --body-file CAMINHO]   (CAMINHO "-" lê stdin)
-  task list [--status S] | show <id> | next | move <id> <status> | graph [--dot]
+  task list [--status S] [--milestone M] | show <id> | next | move <id> <status> | graph [--dot]
   agent list | show <nome>
   project show | pause [--reason R] | resume | limit <chave> <valor|->
+  project milestone <id> [--title T] [--due AAAA-MM-DD] [--gate G] | <id> -
   context <task-id>             o pacote de contexto que um agente recebe (--json para ferramentas)
   verify <task-id> [--dir D]    roda os checks da task e grava evidência
   evidence <task-id> [--verify] [--keys DIR]   registros; --verify confere assinaturas contra DIR (padrão .trilha/keys)
@@ -134,13 +141,15 @@ var pt = map[string]string{
 	"usage: trilha-spec agent show <name>":        "uso: trilha-spec agent show <nome>",
 	"unknown agent command %q":                    "subcomando de agent desconhecido %q",
 	// project
-	"usage: trilha-spec project show | pause [--reason R] | resume | limit <key> <value|->": "uso: trilha-spec project show | pause [--reason R] | resume | limit <chave> <valor|->",
-	"usage: trilha-spec project limit <key> <value|->":                                      "uso: trilha-spec project limit <chave> <valor|->",
-	"project is paused: %s\n":      "projeto pausado: %s\n",
-	"%s is paused: %s\n":           "%s está pausado: %s\n",
-	"%s resumed\n":                 "%s retomado\n",
-	"limit %s: %q is not a number": "limite %s: %q não é um número",
-	"unknown project command %q":   "subcomando de project desconhecido %q",
+	"usage: trilha-spec project show | pause [--reason R] | resume | limit <key> <value|-> | milestone <id> [flags]": "uso: trilha-spec project show | pause [--reason R] | resume | limit <chave> <valor|-> | milestone <id> [flags]",
+	"usage: trilha-spec project milestone <id> [--title T] [--due YYYY-MM-DD] [--gate G] | <id> -":                   "uso: trilha-spec project milestone <id> [--title T] [--due AAAA-MM-DD] [--gate G] | <id> -",
+	"milestone %s is not declared":                     "o marco %s não está declarado",
+	"usage: trilha-spec project limit <key> <value|->": "uso: trilha-spec project limit <chave> <valor|->",
+	"project is paused: %s\n":                          "projeto pausado: %s\n",
+	"%s is paused: %s\n":                               "%s está pausado: %s\n",
+	"%s resumed\n":                                     "%s retomado\n",
+	"limit %s: %q is not a number":                     "limite %s: %q não é um número",
+	"unknown project command %q":                       "subcomando de project desconhecido %q",
 	// context, verify, evidence
 	"usage: trilha-spec context <task-id>":          "uso: trilha-spec context <task-id>",
 	"usage: trilha-spec verify <task-id> [--dir D]": "uso: trilha-spec verify <task-id> [--dir D]",
@@ -172,5 +181,8 @@ var pt = map[string]string{
 	"requirement declared by more than one spec: %s":                                                     "requisito declarado por mais de uma spec: %s",
 	"task covers a requirement no spec declares: %s":                                                     "a task cobre um requisito que nenhuma spec declara: %s",
 	"requirement no task covers: %s":                                                                     "requisito que nenhuma task cobre: %s",
+	"milestone project.md does not declare: %s":                                                          "marco que o project.md não declara: %s",
+	"milestone %s has no task":                                                                           "o marco %s não tem task",
+	"task past its milestone's due date: %s":                                                             "task com o prazo do marco vencido: %s",
 	".trilha/.gitignore ignores everything (`*`): specs, tasks and evidence will not be committed; run `trilha-spec init` to rewrite it": ".trilha/.gitignore ignora tudo (`*`): specs, tasks e evidência não serão commitadas; rode `trilha-spec init` para reescrevê-lo",
 }

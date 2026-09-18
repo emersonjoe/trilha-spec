@@ -482,3 +482,52 @@ func TestRequirementCoverageCLI(t *testing.T) {
 		t.Fatalf("context:\n%s", out)
 	}
 }
+
+// TestMilestonesCLI puts a calendar on the project: `next` prefers the nearest
+// deadline, `task list --milestone` narrows to one, and doctor reports what the
+// schedule says.
+func TestMilestonesCLI(t *testing.T) {
+	dir := t.TempDir()
+	must(t, dir, "init", "--name", "programa")
+	must(t, dir, "project", "milestone", "M1", "--title", "Descoberta", "--due", "2026-01-31")
+	must(t, dir, "project", "milestone", "M2", "--title", "PoC", "--due", "2027-04-30", "--gate", "aceite do cliente")
+	must(t, dir, "project", "milestone", "M3", "--due", "2028-01-01")
+	if out := must(t, dir, "project", "show"); !strings.Contains(out, "milestones:\n  - id: M1\n    title: Descoberta\n    due: 2026-01-31\n") {
+		t.Fatalf("project show:\n%s", out)
+	}
+	if out, err := cli(t, dir, "project", "milestone", "M4", "--due", "30/04/2027"); err == nil || !strings.Contains(out, "is not a date") {
+		t.Fatalf("bad due accepted:\n%s", out)
+	}
+	must(t, dir, "task", "add", "Piloto", "--milestone", "M3", "--status", "ready", "--accept", "ok")
+	must(t, dir, "task", "add", "Entrega", "--milestone", "M2", "--status", "ready", "--accept", "ok")
+	must(t, dir, "task", "add", "Levantamento", "--milestone", "M1", "--status", "ready", "--accept", "ok")
+	must(t, dir, "task", "add", "Sem data", "--status", "ready", "--accept", "ok")
+	// The nearest deadline first; a task with no milestone last.
+	out := must(t, dir, "task", "next")
+	if want := "TASK-003  Levantamento\nTASK-002  Entrega\nTASK-001  Piloto\nTASK-004  Sem data\n"; out != want {
+		t.Fatalf("next:\n%s\nwanted:\n%s", out, want)
+	}
+	if out := must(t, dir, "task", "list", "--milestone", "M2"); !strings.Contains(out, "TASK-002") || strings.Contains(out, "TASK-001") {
+		t.Fatalf("list --milestone:\n%s", out)
+	}
+	// The context pack carries the milestone and its date.
+	if out := must(t, dir, "context", "TASK-002"); !strings.Contains(out, "Milestone: M2, due 2027-04-30 (aceite do cliente)") {
+		t.Fatalf("context:\n%s", out)
+	}
+	if out := must(t, dir, "context", "TASK-002", "--json"); !strings.Contains(out, `"due": "2027-04-30"`) {
+		t.Fatalf("context json:\n%s", out)
+	}
+	// M1 is in the past and its task is not done: a warning, never a failure.
+	out = must(t, dir, "doctor")
+	if !strings.Contains(out, "task past its milestone's due date: TASK-003 M1 2026-01-31") {
+		t.Fatalf("doctor:\n%s", out)
+	}
+	must(t, dir, "project", "milestone", "M3", "-")
+	if out := must(t, dir, "project", "show", "--json"); strings.Contains(out, `"M3"`) {
+		t.Fatalf("milestone not removed:\n%s", out)
+	}
+	// TASK-001 now names a milestone project.md does not declare: a fault.
+	if out, err := cli(t, dir, "doctor"); err == nil || !strings.Contains(out, "milestone project.md does not declare: TASK-001 M3") {
+		t.Fatalf("unknown milestone accepted:\n%s", out)
+	}
+}

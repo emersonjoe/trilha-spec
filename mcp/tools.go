@@ -19,21 +19,29 @@ func Tools(l spec.Layout, write bool) []*Tool {
 	tools := []*Tool{
 		{
 			Name:        "trilha_list_tasks",
-			Description: "List every task with id, title, status and dependencies. Filter by status with {\"status\": \"ready\"}.",
-			Schema:      json.RawMessage(`{"type":"object","properties":{"status":{"type":"string"}}}`),
+			Description: "List every task with id, title, status, milestone and dependencies. Filter by status with {\"status\": \"ready\"} or by milestone with {\"milestone\": \"M2\"}.",
+			Schema:      json.RawMessage(`{"type":"object","properties":{"status":{"type":"string"},"milestone":{"type":"string"}}}`),
 			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-				var in struct{ Status string }
+				var in struct{ Status, Milestone string }
 				json.Unmarshal(args, &in)
 				tasks, err := st.List()
 				if err != nil {
 					return "", err
 				}
+				byID, err := specsByID(l)
+				if err != nil {
+					return "", err
+				}
 				var out []map[string]any
 				for _, t := range tasks {
+					m := task.MilestoneOf(t, byID)
 					if in.Status != "" && string(t.Status) != in.Status {
 						continue
 					}
-					out = append(out, map[string]any{"id": t.ID, "title": t.Title, "status": t.Status, "depends_on": t.DependsOn, "agent": t.Agent})
+					if in.Milestone != "" && m != in.Milestone {
+						continue
+					}
+					out = append(out, map[string]any{"id": t.ID, "title": t.Title, "status": t.Status, "depends_on": t.DependsOn, "agent": t.Agent, "milestone": m})
 				}
 				return js(out), nil
 			},
@@ -58,16 +66,24 @@ func Tools(l spec.Layout, write bool) []*Tool {
 		},
 		{
 			Name:        "trilha_next",
-			Description: "Answer the tasks that can be picked up now: status ready with every dependency done, in dependency order. A paused project answers an error with the pause reason.",
+			Description: "Answer the tasks that can be picked up now: status ready with every dependency done, nearest milestone due date first, then dependency order. A paused project answers an error with the pause reason.",
 			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-				if p, err := l.LoadProject(); err == nil && p.Paused {
+				p, err := l.LoadProject()
+				if err != nil {
+					return "", err
+				}
+				if p.Paused {
 					return "", fmt.Errorf("project is paused: %s (since %s)", p.PauseReason, p.PausedAt)
 				}
 				g, err := st.Graph()
 				if err != nil {
 					return "", err
 				}
-				return js(g.Ready()), nil
+				byID, err := specsByID(l)
+				if err != nil {
+					return "", err
+				}
+				return js(task.ByDue(g.Ready(), func(t *task.Task) string { return task.MilestoneOf(t, byID) }, p.Due())), nil
 			},
 		},
 		{
@@ -234,6 +250,15 @@ func Tools(l spec.Layout, write bool) []*Tool {
 			},
 		},
 	)
+}
+
+// specsByID indexes the specifications, for the fields a task inherits.
+func specsByID(l spec.Layout) (map[string]*spec.Spec, error) {
+	specs, err := l.ListSpecs()
+	if err != nil {
+		return nil, err
+	}
+	return task.SpecsByID(specs), nil
 }
 
 func js(v any) string {

@@ -65,6 +65,7 @@ fields first, in the order below, then unknown fields in the order read.
 | `title` | yes | one line |
 | `status` | yes | §4; missing means `idea` |
 | `spec` | no | the specification ID it implements |
+| `milestone` | no | the milestone (§12) it belongs to; empty means its spec's |
 | `agent` | no | an agent name; `project.default_agent` otherwise |
 | `depends_on` | no | task IDs; every one must exist; no cycles |
 | `covers` | no | requirement IDs the task delivers (§11); every one must be declared by a spec |
@@ -100,7 +101,8 @@ Rules a writer enforces:
 - `ready` and `running` require at least one acceptance criterion.
 - `running` requires every dependency to be `done`.
 - A task is **executable** when it is `ready` and every dependency is `done`. `next` lists
-  executable tasks in dependency order, ties broken by ID.
+  executable tasks in dependency order, ties broken by ID, and among those the nearest
+  milestone due date (§12) first; a task with no due date comes last.
 
 ## 5. Evidence
 
@@ -158,8 +160,9 @@ fails verification with a `note` saying so.
 ## 6. Context pack
 
 What an agent receives for a task, in this order: project, constitution, its own manifest,
-the specification, the task (body, acceptance, the requirements it covers with their text,
-checks, dependencies with their status, evidence so far), every file in `context/`. Markdown for a prompt, JSON for a tool. The pack
+the specification, the task (body, its milestone with the due date, acceptance, the
+requirements it covers with their text, checks, dependencies with their status, evidence so
+far), every file in `context/`. Markdown for a prompt, JSON for a tool. The pack
 ends by telling the agent not to mark the task done: that is the reviewer's decision.
 
 ## 7. Agent manifest
@@ -216,6 +219,7 @@ carries its cost under the names a `run` evidence record uses (§5): `provider`,
 | `title` | yes | one line |
 | `status` | yes | below; missing means `draft` |
 | `issue` | no | the issue that is the source of the scope |
+| `milestone` | no | the milestone (§12) the whole spec belongs to |
 | `supersedes` | no | spec IDs this one replaces; every one must exist |
 | `depends_on` | no | spec IDs this one builds on; every one must exist |
 | `assets` | no | what the change touches, for the security reviewer: free identifiers |
@@ -278,6 +282,7 @@ tools consume.
 | `description` | no | one line |
 | `default_agent` | no | the agent a task without `agent` gets |
 | `verify` | no | commands every task runs on top of its own checks |
+| `milestones` | no | the dated points of the programme, one block each: `id`, `title`, `due`, `gate` |
 | `limits` | no | a map of numeric thresholds, below |
 | `paused` | no | `true` stops the queue: `next` answers nothing and says why |
 | `pause_reason` | no | free text; `breaker:<limit>` when a control plane tripped on a limit |
@@ -291,7 +296,30 @@ tools consume.
 | `max_failure_rate` | a share, 0..1, over the last runs |
 | `max_repeated_failure_class` | the same `failure_class` this many times in a row |
 
-The protocol *carries* limits and pause; enforcing them — refusing to start a task, stopping a
+### Milestones
+
+A contract with paid milestones, or a programme reported against a calendar, declares them
+once in `project.md`:
+
+```
+milestones:
+  - id: M2
+    title: PoC entregue
+    due: 2027-04-30
+    gate: aceite do cliente
+```
+
+An `id` follows the rule of a requirement id (§11); `due` is a calendar day, `YYYY-MM-DD`, not
+an instant. A spec and a task name one in `milestone`, and a task without one of its own takes
+its spec's, the way a task without an `agent` takes `default_agent`. `task list --milestone M2`
+narrows a listing; `next` prefers the nearest due date among what can run; the context pack
+(§6) hands the agent the milestone and its date. `doctor` reports a milestone no task belongs
+to and an unfinished task whose milestone is past due — both warnings, because the protocol
+reports the calendar and the people keep it — and, as a fault, a task or spec naming a
+milestone `project.md` does not declare. Estimates, capacity and what a milestone is worth are
+a control plane's business.
+
+The protocol *carries* limits, milestones and pause; enforcing them — refusing to start a task, stopping a
 running attempt, tripping the breaker — is the runner's and the control plane's job, as with
 agent manifests (§7). The context pack (§6) includes `limits` and the pause, so an agent knows
 its envelope. Every reader may ignore all of these fields.

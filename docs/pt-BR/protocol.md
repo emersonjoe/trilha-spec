@@ -65,6 +65,7 @@ estável: campos do protocolo primeiro, na ordem abaixo, depois os desconhecidos
 | `title` | sim | uma linha |
 | `status` | sim | §4; ausente vale `idea` |
 | `spec` | não | o ID da especificação que implementa |
+| `milestone` | não | o marco (§12) a que pertence; vazio vale o da sua spec |
 | `agent` | não | nome de agente; senão `project.default_agent` |
 | `depends_on` | não | IDs de task; todos precisam existir; sem ciclo |
 | `covers` | não | IDs de requisito que a task entrega (§11); todos precisam ser declarados por uma spec |
@@ -100,7 +101,8 @@ Regras que quem escreve impõe:
 - `ready` e `running` exigem pelo menos um critério de aceite.
 - `running` exige toda dependência `done`.
 - Uma task é **executável** quando está `ready` e toda dependência está `done`. `next` lista
-  as executáveis em ordem de dependência, empate por ID.
+  as executáveis em ordem de dependência, empate por ID, e entre elas o prazo de marco (§12)
+  mais próximo primeiro; task sem prazo vai por último.
 
 ## 5. Evidência
 
@@ -160,8 +162,8 @@ falha a verificação com uma `note` dizendo isso.
 ## 6. Pacote de contexto
 
 O que um agente recebe para uma task, nesta ordem: projeto, constituição, o próprio manifesto,
-a especificação, a task (corpo, aceite, os requisitos que ela cobre com o texto deles, checks,
-dependências com status, evidência até aqui),
+a especificação, a task (corpo, o marco dela com o prazo, aceite, os requisitos que ela cobre
+com o texto deles, checks, dependências com status, evidência até aqui),
 todo arquivo de `context/`. Markdown para prompt, JSON para ferramenta. O pacote termina
 dizendo ao agente para não marcar a task como done: isso é decisão do revisor.
 
@@ -178,7 +180,7 @@ network}, `constraints[]`. O protocolo carrega o manifesto; fazê-lo valer é pa
 
 | Ferramenta | Escreve? | Argumentos |
 |---|---|---|
-| `trilha_list_tasks` | | `status?` |
+| `trilha_list_tasks` | | `status?`, `milestone?` |
 | `trilha_get_task` | | `id` |
 | `trilha_next` | | — ; projeto pausado (§12) responde erro com o motivo |
 | `trilha_context` | | `id`, `format?` (markdown \| json) |
@@ -219,6 +221,7 @@ Attempt carrega seu custo com os nomes do registro de evidência `run` (§5): `p
 | `title` | sim | uma linha |
 | `status` | sim | abaixo; ausente significa `draft` |
 | `issue` | não | a issue que é a fonte do escopo |
+| `milestone` | não | o marco (§12) a que a spec inteira pertence |
 | `supersedes` | não | IDs de spec que esta substitui; todos precisam existir |
 | `depends_on` | não | IDs de spec em que esta se apoia; todos precisam existir |
 | `assets` | não | o que a mudança toca, para o revisor de segurança: identificadores livres |
@@ -281,6 +284,7 @@ ferramentas consomem.
 | `description` | não | uma linha |
 | `default_agent` | não | o agente que uma task sem `agent` recebe |
 | `verify` | não | comandos que toda task roda além dos próprios checks |
+| `milestones` | não | os marcos datados do programa, um bloco cada: `id`, `title`, `due`, `gate` |
 | `limits` | não | um mapa de limiares numéricos, abaixo |
 | `paused` | não | `true` para a fila: `next` não responde nada e diz por quê |
 | `pause_reason` | não | texto livre; `breaker:<limite>` quando um control plane disparou por um limite |
@@ -294,7 +298,30 @@ ferramentas consomem.
 | `max_failure_rate` | uma fração, 0..1, sobre as últimas execuções |
 | `max_repeated_failure_class` | o mesmo `failure_class` tantas vezes seguidas |
 
-O protocolo *carrega* limites e pausa; fazê-los valer — recusar iniciar uma task, parar uma
+### Marcos
+
+Um contrato com marcos pagos, ou um programa reportado contra um calendário, declara-os uma
+vez em `project.md`:
+
+```
+milestones:
+  - id: M2
+    title: PoC entregue
+    due: 2027-04-30
+    gate: aceite do cliente
+```
+
+O `id` segue a regra do id de requisito (§11); `due` é um dia de calendário, `AAAA-MM-DD`, não
+um instante. Uma spec e uma task nomeiam um em `milestone`, e uma task sem o próprio herda o da
+spec, como uma task sem `agent` recebe o `default_agent`. `task list --milestone M2` filtra uma
+listagem; `next` prefere o prazo mais próximo entre o que pode rodar; o pacote de contexto (§6)
+entrega ao agente o marco e a data. O `doctor` aponta marco sem nenhuma task e task não
+concluída com o prazo do marco vencido — os dois como aviso, porque o protocolo reporta o
+calendário e são as pessoas que o mantêm — e, como falha, task ou spec que nomeia um marco que
+o `project.md` não declara. Estimativa, capacidade e quanto vale um marco são assunto do
+control plane.
+
+O protocolo *carrega* limites, marcos e pausa; fazê-los valer — recusar iniciar uma task, parar uma
 tentativa em curso, disparar o disjuntor — é trabalho do runner e do control plane, como com os
 manifestos de agente (§7). O pacote de contexto (§6) inclui `limits` e a pausa, para o agente
 conhecer seu envelope. Todo leitor pode ignorar todos esses campos.

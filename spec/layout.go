@@ -201,6 +201,12 @@ func (p Problem) String() string {
 		return "task covers a requirement no spec declares: " + p.Arg
 	case ProblemRequirementUncovered:
 		return "requirement no task covers: " + p.Arg
+	case ProblemMilestoneUnknown:
+		return "milestone project.md does not declare: " + p.Arg
+	case ProblemMilestoneEmpty:
+		return "milestone " + p.Arg + " has no task"
+	case ProblemMilestonePastDue:
+		return "task past its milestone's due date: " + p.Arg
 	}
 	return p.Code + " " + p.Arg
 }

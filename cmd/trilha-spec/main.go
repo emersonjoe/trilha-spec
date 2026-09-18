@@ -37,11 +37,12 @@ usage: trilha-spec <command> [flags]
   spec new <title> [--issue N] [--body TEXT | --body-file PATH] [--asset A]... [--boundary B]... [--control C]... [--evidence CMD]...
   spec list [--status S] | show <id> [--coverage] | move <id> <status>
   spec set <id> [--issue N] [--supersedes A,B] [--depends A,B] [--asset A]... [--boundary B]... [--control C]... [--evidence CMD]...
-  task add <title> [--spec ID] [--depends A,B] [--agent N] [--status S] [--covers R,S] [--accept C]... [--check CMD]...
+  task add <title> [--spec ID] [--depends A,B] [--agent N] [--status S] [--covers R,S] [--milestone M] [--accept C]... [--check CMD]...
            [--body TEXT | --body-file PATH]   (PATH "-" reads stdin)
-  task list [--status S] | show <id> | next | move <id> <status> | graph [--dot]
+  task list [--status S] [--milestone M] | show <id> | next | move <id> <status> | graph [--dot]
   agent list | show <name>
   project show | pause [--reason R] | resume | limit <key> <value|->
+  project milestone <id> [--title T] [--due YYYY-MM-DD] [--gate G] | <id> -
   context <task-id>             the context pack an agent receives (--json for tools)
   verify <task-id> [--dir D]    run the task's checks and record evidence
   evidence <task-id> [--verify] [--keys DIR]   records; --verify checks signatures against DIR (default .trilha/keys)
@@ -324,6 +325,7 @@ func cmdTask(args []string, out io.Writer) error {
 		deps := fs.String("depends", "", "comma-separated task ids")
 		ag := fs.String("agent", "", "agent name")
 		covers := fs.String("covers", "", "comma-separated requirement ids this task delivers")
+		milestone := fs.String("milestone", "", "milestone id from project.md")
 		status := fs.String("status", string(task.Idea), "initial status")
 		var accept, checks multi
 		fs.Var(&accept, "accept", "acceptance criterion (repeatable)")
@@ -350,6 +352,7 @@ func cmdTask(args []string, out io.Writer) error {
 			t.Body = text
 			t.DependsOn = splitList(*deps)
 			t.Covers = splitList(*covers)
+			t.Milestone = *milestone
 		})
 		if err != nil {
 			return err
@@ -364,6 +367,7 @@ func cmdTask(args []string, out io.Writer) error {
 		fs := flags("task list")
 		asJSON := fs.Bool("json", false, "")
 		status := fs.String("status", "", "filter by status")
+		milestone := fs.String("milestone", "", "filter by milestone, the task's own or its spec's")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -375,11 +379,19 @@ func cmdTask(args []string, out io.Writer) error {
 		if err != nil {
 			return err
 		}
+		byID, err := specIndex(st.Layout)
+		if err != nil {
+			return err
+		}
 		var kept []*task.Task
 		for _, t := range tasks {
-			if *status == "" || string(t.Status) == *status {
-				kept = append(kept, t)
+			if *status != "" && string(t.Status) != *status {
+				continue
 			}
+			if *milestone != "" && task.MilestoneOf(t, byID) != *milestone {
+				continue
+			}
+			kept = append(kept, t)
 		}
 		if *asJSON {
 			return printJSON(out, kept)
@@ -419,16 +431,25 @@ func cmdTask(args []string, out io.Writer) error {
 			return err
 		}
 		ready := g.Ready()
+		// Among what can run, the nearest deadline comes first; the rest of
+		// the order is the dependency order it already had.
+		byID, err := specIndex(st.Layout)
+		if err != nil {
+			return err
+		}
 		// A paused project answers nothing and says why. The list stays a
 		// list for tools; the reason goes to stderr, and `project show --json`
 		// has it in full.
-		if p, err := st.Layout.LoadProject(); err == nil && p.Paused {
-			ready = nil
-			if !*asJSON {
-				fmt.Fprintf(out, T("project is paused: %s\n"), pauseReason(p))
-				return nil
+		if p, err := st.Layout.LoadProject(); err == nil {
+			ready = task.ByDue(ready, func(t *task.Task) string { return task.MilestoneOf(t, byID) }, p.Due())
+			if p.Paused {
+				ready = nil
+				if !*asJSON {
+					fmt.Fprintf(out, T("project is paused: %s\n"), pauseReason(p))
+					return nil
+				}
+				fmt.Fprintf(os.Stderr, T("project is paused: %s\n"), pauseReason(p))
 			}
-			fmt.Fprintf(os.Stderr, T("project is paused: %s\n"), pauseReason(p))
 		}
 		if *asJSON {
 			if ready == nil {
@@ -727,7 +748,7 @@ func pauseReason(p *spec.Project) string {
 
 func cmdProject(args []string, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New(T("usage: trilha-spec project show | pause [--reason R] | resume | limit <key> <value|->"))
+		return errors.New(T("usage: trilha-spec project show | pause [--reason R] | resume | limit <key> <value|-> | milestone <id> [flags]"))
 	}
 	st, err := store()
 	if err != nil {
@@ -768,6 +789,39 @@ func cmdProject(args []string, out io.Writer) error {
 			return err
 		}
 		fmt.Fprintf(out, T("%s resumed\n"), p.Name)
+		return nil
+	case "milestone":
+		fs := flags("project milestone")
+		title := fs.String("title", "", "one line naming what it delivers")
+		due := fs.String("due", "", "the day it is due, YYYY-MM-DD")
+		gate := fs.String("gate", "", "what has to be true for it to be met")
+		pos, err := parse(fs, args[1:])
+		if err != nil {
+			return err
+		}
+		if len(pos) == 2 && pos[1] == "-" {
+			if !p.DeleteMilestone(pos[0]) {
+				return fmt.Errorf(T("milestone %s is not declared"), pos[0])
+			}
+		} else if len(pos) == 1 {
+			m, _ := p.Milestone(pos[0])
+			m.ID = pos[0]
+			for _, kv := range []struct {
+				into *string
+				from string
+			}{{&m.Title, *title}, {&m.Due, *due}, {&m.Gate, *gate}} {
+				if kv.from != "" {
+					*kv.into = kv.from
+				}
+			}
+			p.SetMilestone(m)
+		} else {
+			return errors.New(T("usage: trilha-spec project milestone <id> [--title T] [--due YYYY-MM-DD] [--gate G] | <id> -"))
+		}
+		if err := l.SaveProject(p); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, T("updated %s\n"), rel(l, l.Project()))
 		return nil
 	case "limit":
 		if len(args) != 3 {
@@ -963,6 +1017,13 @@ func cmdDoctor(args []string, out io.Writer) error {
 		for _, p := range task.CheckRequirements(specs, tasks) {
 			add(p)
 		}
+		if proj, err := st.Layout.LoadProject(); err != nil {
+			problems = append(problems, err.Error())
+		} else {
+			for _, p := range task.CheckMilestones(proj, specs, tasks, task.Today()) {
+				add(p)
+			}
+		}
 	}
 	if _, err := agent.List(st.Layout); err != nil {
 		problems = append(problems, err.Error())
@@ -989,6 +1050,16 @@ func rel(l spec.Layout, p string) string {
 		return r
 	}
 	return p
+}
+
+// specIndex answers every specification by ID, for the fields a task
+// inherits from the spec it implements.
+func specIndex(l spec.Layout) (map[string]*spec.Spec, error) {
+	specs, err := l.ListSpecs()
+	if err != nil {
+		return nil, err
+	}
+	return task.SpecsByID(specs), nil
 }
 
 // printCoverage renders the requirement matrix: one line per requirement,

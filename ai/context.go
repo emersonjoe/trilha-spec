@@ -34,7 +34,10 @@ type Pack struct {
 	// their text, so the agent reads the scope in the words of the document
 	// it came from.
 	Requirements []spec.Requirement `json:"requirements,omitempty"`
-	Agent        *agent.Agent       `json:"agent,omitempty"`
+	// Milestone is the dated point the task belongs to — its own, or the
+	// one of its spec — so the agent knows the calendar it works against.
+	Milestone *spec.Milestone `json:"milestone,omitempty"`
+	Agent     *agent.Agent    `json:"agent,omitempty"`
 	// Context is .trilha/context/*.md, by file name.
 	Context map[string]string `json:"context,omitempty"`
 }
@@ -89,6 +92,19 @@ func Build(l spec.Layout, id string) (*Pack, error) {
 			}
 		}
 	}
+	if p.Project != nil {
+		byID := map[string]*spec.Spec{}
+		if p.Spec != nil {
+			byID[p.Spec.ID] = p.Spec
+		}
+		if id := task.MilestoneOf(t, byID); id != "" {
+			if m, ok := p.Project.Milestone(id); ok {
+				p.Milestone = &m
+			} else {
+				p.Milestone = &spec.Milestone{ID: id}
+			}
+		}
+	}
 	name := t.Agent
 	if name == "" {
 		name = p.Project.DefaultAgent
@@ -131,6 +147,15 @@ func (p *Pack) Markdown() string {
 	fmt.Fprintf(&b, "Status: %s", p.Task.Status)
 	if p.Agent != nil {
 		fmt.Fprintf(&b, " · Agent: %s", p.Agent.Name)
+	}
+	if p.Milestone != nil {
+		fmt.Fprintf(&b, " · Milestone: %s", p.Milestone.ID)
+		if p.Milestone.Due != "" {
+			fmt.Fprintf(&b, ", due %s", p.Milestone.Due)
+		}
+		if p.Milestone.Gate != "" {
+			fmt.Fprintf(&b, " (%s)", p.Milestone.Gate)
+		}
 	}
 	b.WriteString("\n\n")
 	if p.Project != nil && (p.Project.Name != "" || p.Project.Body != "") {

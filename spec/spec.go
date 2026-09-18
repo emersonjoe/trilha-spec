@@ -63,6 +63,9 @@ type Spec struct {
 	Title  string `json:"title"`
 	Status Status `json:"status"`
 	Issue  string `json:"issue,omitempty"`
+	// Milestone is the dated point this spec belongs to (§12); a task
+	// without one of its own inherits it.
+	Milestone string `json:"milestone,omitempty"`
 	// Supersedes names the specs this one replaces; each of them is
 	// `superseded`, and a `superseded` spec is named by exactly this field of
 	// its successor.
@@ -108,6 +111,7 @@ func ParseSpec(src []byte) (*Spec, error) {
 		Title:           d.Fields.Get("title"),
 		Status:          Status(d.Fields.Get("status")),
 		Issue:           d.Fields.Get("issue"),
+		Milestone:       d.Fields.Get("milestone"),
 		Supersedes:      d.Fields.GetList("supersedes"),
 		DependsOn:       d.Fields.GetList("depends_on"),
 		Assets:          d.Fields.GetList("assets"),
@@ -154,6 +158,9 @@ func (s *Spec) Validate() error {
 			}
 		}
 	}
+	if s.Milestone != "" && !ValidMilestoneID(s.Milestone) {
+		errs = append(errs, fmt.Sprintf("milestone %q is not a milestone id", s.Milestone))
+	}
 	errs = append(errs, validateRequirements(s.Requirements)...)
 	sort.Strings(errs)
 	if len(errs) > 0 {
@@ -184,6 +191,11 @@ func (s *Spec) Bytes() []byte {
 		d.Fields.Set("issue", s.Issue)
 	} else {
 		d.Fields.Delete("issue")
+	}
+	if s.Milestone != "" {
+		d.Fields.Set("milestone", s.Milestone)
+	} else {
+		d.Fields.Delete("milestone")
 	}
 	// Fixed order, so a spec written twice is the same bytes.
 	for _, kv := range []struct {
@@ -228,7 +240,7 @@ const (
 )
 
 // warnings are the problem codes doctor reports without failing.
-var warnings = map[string]bool{ProblemSpecNoSecurity: true, ProblemRequirementUncovered: true}
+var warnings = map[string]bool{ProblemSpecNoSecurity: true, ProblemRequirementUncovered: true, ProblemMilestoneEmpty: true, ProblemMilestonePastDue: true}
 
 // Warning answers whether the problem is advice rather than a fault.
 func (p Problem) Warning() bool { return warnings[p.Code] }
