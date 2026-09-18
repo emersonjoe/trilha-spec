@@ -28,6 +28,14 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+// needs skips a test when a program it relies on is not on this machine.
+func needs(t *testing.T, program string) {
+	t.Helper()
+	if _, err := exec.LookPath(program); err != nil {
+		t.Skipf("%s is not on PATH", program)
+	}
+}
+
 func cli(t *testing.T, dir string, args ...string) (string, error) {
 	t.Helper()
 	return cliEnv(t, dir, nil, args...)
@@ -529,5 +537,57 @@ func TestMilestonesCLI(t *testing.T) {
 	// TASK-001 now names a milestone project.md does not declare: a fault.
 	if out, err := cli(t, dir, "doctor"); err == nil || !strings.Contains(out, "milestone project.md does not declare: TASK-001 M3") {
 		t.Fatalf("unknown milestone accepted:\n%s", out)
+	}
+}
+
+// TestEvalEvidenceCLI records numbers instead of hiding them in an exit code:
+// a harness prints one JSON line per metric, verify turns each into an `eval`,
+// and a metric below its threshold fails the verification.
+func TestEvalEvidenceCLI(t *testing.T) {
+	needs(t, "cat")
+	dir := t.TempDir()
+	must(t, dir, "init", "--name", "triagem")
+	// The harness prints one JSON line per metric; a file keeps the shell out
+	// of the way of the quotes.
+	os.WriteFile(filepath.Join(dir, "metrics.txt"), []byte("rodando\n"+
+		`{"metric":"triage_top1","value":0.87,"threshold":0.85,"comparator":">=","dataset":{"id":"golden-2026","sha256":"abc"}}`+"\n"), 0o644)
+	must(t, dir, "task", "add", "Triagem", "--status", "ready",
+		"--accept", "metric: triage_top1 >= 0.85", "--accept", "metric: p95_latency <= 5",
+		"--check", "cat metrics.txt")
+	must(t, dir, "task", "move", "TASK-001", "running")
+	must(t, dir, "task", "move", "TASK-001", "verify")
+	must(t, dir, "verify", "TASK-001")
+	out := must(t, dir, "evidence", "TASK-001")
+	if !strings.Contains(out, "✓ eval     trilha-spec verify   triage_top1 0.87 >= 0.85 on golden-2026") {
+		t.Fatalf("evidence:\n%s", out)
+	}
+	// The record is readable: a comparator is `>=`, not an escape.
+	raw, err := os.ReadFile(filepath.Join(dir, ".trilha", "evidence", "TASK-001", "002-eval.json"))
+	if err != nil || !strings.Contains(string(raw), `"comparator": ">="`) {
+		t.Fatalf("record: %v\n%s", err, raw)
+	}
+	// One gate has no evidence yet: doctor says so once the task is on its way out.
+	if out := must(t, dir, "doctor"); !strings.Contains(out, "acceptance metric with no eval evidence: TASK-001 p95_latency") {
+		t.Fatalf("doctor:\n%s", out)
+	}
+	// A metric added by hand, and the context pack showing where the numbers stand.
+	must(t, dir, "evidence", "TASK-001", "add", "--eval", "--metric", "p95_latency", "--value", "7", "--unit", "s", "--threshold", "5", "--comparator", "<=", "--by", "harness")
+	if out := must(t, dir, "evidence", "TASK-001", "--json"); !strings.Contains(out, `"value": 7`) || !strings.Contains(out, `"comparator": "<="`) {
+		t.Fatalf("evidence json:\n%s", out)
+	}
+	if out := must(t, dir, "context", "TASK-001"); !strings.Contains(out, "### Metrics so far") || !strings.Contains(out, "✗ p95_latency 7 s <= 5") {
+		t.Fatalf("context:\n%s", out)
+	}
+	if out, err := cli(t, dir, "evidence", "TASK-001", "add", "--eval", "--metric", "x_y", "--value", "many"); err == nil || !strings.Contains(out, "is not a number") {
+		t.Fatalf("bad value accepted:\n%s", out)
+	}
+	// A failing gate fails verification even though the command exits 0.
+	os.WriteFile(filepath.Join(dir, "slow.txt"), []byte(`{"metric":"p95_latency","value":7,"threshold":5,"comparator":"<="}`+"\n"), 0o644)
+	must(t, dir, "task", "add", "Latencia", "--status", "ready", "--accept", "metric: p95_latency <= 5",
+		"--check", "cat slow.txt")
+	must(t, dir, "task", "move", "TASK-002", "running")
+	must(t, dir, "task", "move", "TASK-002", "verify")
+	if out, err := cli(t, dir, "verify", "TASK-002"); err == nil || !strings.Contains(out, "TASK-002 is now failed") {
+		t.Fatalf("a failing metric must fail verify:\n%s", out)
 	}
 }

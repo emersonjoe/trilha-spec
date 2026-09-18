@@ -240,7 +240,7 @@ const (
 )
 
 // warnings are the problem codes doctor reports without failing.
-var warnings = map[string]bool{ProblemSpecNoSecurity: true, ProblemRequirementUncovered: true, ProblemMilestoneEmpty: true, ProblemMilestonePastDue: true}
+var warnings = map[string]bool{ProblemSpecNoSecurity: true, ProblemRequirementUncovered: true, ProblemMilestoneEmpty: true, ProblemMilestonePastDue: true, ProblemMetricNotEvidenced: true}
 
 // Warning answers whether the problem is advice rather than a fault.
 func (p Problem) Warning() bool { return warnings[p.Code] }

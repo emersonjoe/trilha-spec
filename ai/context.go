@@ -7,6 +7,7 @@
 package ai
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -34,6 +35,9 @@ type Pack struct {
 	// their text, so the agent reads the scope in the words of the document
 	// it came from.
 	Requirements []spec.Requirement `json:"requirements,omitempty"`
+	// Metrics is the last value of every metric the task has evidence for:
+	// where the numbers stand, without reading every record.
+	Metrics []task.Metric `json:"metrics,omitempty"`
 	// Milestone is the dated point the task belongs to — its own, or the
 	// one of its spec — so the agent knows the calendar it works against.
 	Milestone *spec.Milestone `json:"milestone,omitempty"`
@@ -77,6 +81,7 @@ func Build(l spec.Layout, id string) (*Pack, error) {
 			return nil, err
 		}
 		p.Evidence = keys.CheckAll(evidence)
+		p.Metrics = task.Metrics(evidence)
 	}
 	if len(t.Covers) > 0 {
 		specs, err := l.ListSpecs()
@@ -133,9 +138,16 @@ func Build(l spec.Layout, id string) (*Pack, error) {
 }
 
 // JSON renders the pack for a tool.
+// No HTML escaping: a comparator is `>=` in the pack, as it is in the record.
 func (p *Pack) JSON() []byte {
-	b, _ := json.MarshalIndent(p, "", "  ")
-	return append(b, '\n')
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(p); err != nil {
+		return nil
+	}
+	return b.Bytes()
 }
 
 // Markdown renders the pack as a prompt: the fixed order below is the order
@@ -225,6 +237,17 @@ func (p *Pack) Markdown() string {
 		}
 		b.WriteString("\n")
 	}
+	if len(p.Metrics) > 0 {
+		b.WriteString("### Metrics so far" + nl + nl)
+		for _, m := range p.Metrics {
+			mark := "✗"
+			if m.Passed {
+				mark = "✓"
+			}
+			fmt.Fprintf(&b, "- %s %s (#%d)"+nl, mark, m.String(), m.Seq)
+		}
+		b.WriteString(nl)
+	}
 	if len(p.Task.Checks) > 0 {
 		b.WriteString("### Checks that will run\n\n")
 		for _, c := range p.Task.Checks {
@@ -280,6 +303,9 @@ func (p *Pack) Markdown() string {
 	b.WriteString("Make every acceptance criterion true, run the checks, and report what changed and where the proof is. Do not mark the task done: that is the reviewer's decision, taken from the evidence.\n")
 	return b.String()
 }
+
+// nl keeps the renderer readable where a literal escape would be noise.
+const nl = "\n"
 
 func list(b *strings.Builder, title string, items []string) {
 	if len(items) == 0 {

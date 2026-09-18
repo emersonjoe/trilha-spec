@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -261,7 +262,15 @@ func specsByID(l spec.Layout) (map[string]*spec.Spec, error) {
 	return task.SpecsByID(specs), nil
 }
 
+// js renders a tool's answer. No HTML escaping, so a comparator reads as
+// `>=` in the host's transcript.
 func js(v any) string {
-	b, _ := json.MarshalIndent(v, "", "  ")
-	return string(b)
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(v); err != nil {
+		return ""
+	}
+	return strings.TrimRight(b.String(), "\n")
 }

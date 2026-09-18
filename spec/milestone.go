@@ -144,4 +144,7 @@ const (
 	// its due date. A warning: the protocol reports the calendar, it does
 	// not enforce it. Arg is "TASK-NNN ID DUE".
 	ProblemMilestonePastDue = "milestone-past-due"
+	// ProblemMetricNotEvidenced: a task on its way out with an acceptance
+	// metric no `eval` record answers. A warning. Arg is "TASK-NNN metric".
+	ProblemMetricNotEvidenced = "metric-not-evidenced"
 )

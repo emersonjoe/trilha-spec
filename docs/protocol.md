@@ -69,7 +69,7 @@ fields first, in the order below, then unknown fields in the order read.
 | `agent` | no | an agent name; `project.default_agent` otherwise |
 | `depends_on` | no | task IDs; every one must exist; no cycles |
 | `covers` | no | requirement IDs the task delivers (§11); every one must be declared by a spec |
-| `acceptance` | for `ready` on | what must be true to close, in words |
+| `acceptance` | for `ready` on | what must be true to close, in words; an item may be a metric gate, `metric: <name> <comparator> <number>` (§5) |
 | `checks` | no | commands `verify` runs; program + arguments, no shell |
 | `attempt`, `max_attempts`, `token_budget` | no | execution limits and current attempt metadata |
 | `retry_of` | no | the preceding Run ID (`run-NNNNNN`) when this task is a repair |
@@ -125,9 +125,46 @@ One JSON file per record, `evidence/TASK-NNN/NNN-kind.json`, NNN the sequence wi
 ```
 
 `kind` is `check` (a command ran), `note` (a person or agent wrote something), `artifact`
-(files produced; `files[]`) or `run` (a runner's execution record; `meta{}` is free). `output`
-may be truncated at 64 KiB; `output_sha256` hashes the whole of it. A record is never edited;
-a correction is a new record.
+(files produced; `files[]`), `run` (a runner's execution record; `meta{}` is free) or `eval`
+(a number a harness measured, below). `output` may be truncated at 64 KiB; `output_sha256`
+hashes the whole of it. A record is never edited; a correction is a new record. A record is
+written without HTML escaping, so a comparator reads as `>=`.
+
+An **`eval`** record carries a measurement and the bar it had to clear, so the value is
+visible, can be trended across runs and can gate a release — a `check` hides all three in an
+exit code:
+
+```json
+{
+  "kind": "eval",
+  "metric": "triage_top1",
+  "value": 0.87,
+  "unit": "",
+  "threshold": 0.85,
+  "comparator": ">=",
+  "dataset": { "id": "golden-2026", "sha256": "…" },
+  "passed": true
+}
+```
+
+`metric` is lowercase words joined by `_`, `-` or `.`, so two harnesses that measure the same
+thing agree on the name. `comparator` is `>=`, `<=` or `==` and is **required** when
+`threshold` is set: a guessed comparator is a wrong gate. A record without a threshold is a
+measurement, not a gate, and passes. `value` and `threshold` are written even when they are
+zero, because zero is a number a gate cares about. `dataset` names the set the metric was
+measured on and hashes its **manifest**, never its content: a golden set holds real cases, and
+real cases hold personal data. An `eval` is signed like any other record.
+
+`verify` turns every line a check prints on stdout that is a JSON object with a `metric` and a
+`value` into one `eval` record, in that small shape — so a harness in any language emits them
+with one `echo` — and a check that prints plain text is unaffected. A failing `eval` fails the
+verification even when the command exited 0: that is what a gate is for. A line whose
+`threshold` comes without a comparator is recorded as a measurement, with the reason in `note`
+and `passed: false`, rather than gated on a guess.
+
+A task may declare a gate as an acceptance criterion, `metric: triage_top1 >= 0.85`; it is
+still a criterion in words, and `doctor` reports one that no `eval` answers once the task
+reaches `review`. The context pack (§6) carries the last value of every metric.
 
 A `run` record may carry its **cost** in standard fields, so ledgers from different runners
 reconcile: `provider` (`anthropic`), `model` (`claude-sonnet-5`), `tokens_in`, `tokens_out`,
@@ -162,7 +199,7 @@ fails verification with a `note` saying so.
 What an agent receives for a task, in this order: project, constitution, its own manifest,
 the specification, the task (body, its milestone with the due date, acceptance, the
 requirements it covers with their text, checks, dependencies with their status, evidence so
-far), every file in `context/`. Markdown for a prompt, JSON for a tool. The pack
+far and the last value of each metric), every file in `context/`. Markdown for a prompt, JSON for a tool. The pack
 ends by telling the agent not to mark the task done: that is the reviewer's decision.
 
 ## 7. Agent manifest

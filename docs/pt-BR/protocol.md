@@ -69,7 +69,7 @@ estável: campos do protocolo primeiro, na ordem abaixo, depois os desconhecidos
 | `agent` | não | nome de agente; senão `project.default_agent` |
 | `depends_on` | não | IDs de task; todos precisam existir; sem ciclo |
 | `covers` | não | IDs de requisito que a task entrega (§11); todos precisam ser declarados por uma spec |
-| `acceptance` | de `ready` em diante | o que precisa ser verdade para fechar, em palavras |
+| `acceptance` | de `ready` em diante | o que precisa ser verdade para fechar, em palavras; um item pode ser um portão métrico, `metric: <nome> <comparador> <número>` (§5) |
 | `checks` | não | comandos que o `verify` roda; programa + argumentos, sem shell |
 | `attempt`, `max_attempts`, `token_budget` | não | limites de execução e metadados da tentativa atual |
 | `retry_of` | não | ID da Run anterior (`run-NNNNNN`) quando esta task é uma correção |
@@ -125,9 +125,46 @@ Um JSON por registro, `evidence/TASK-NNN/NNN-kind.json`, NNN a sequência dentro
 ```
 
 `kind` é `check` (um comando rodou), `note` (pessoa ou agente escreveu algo), `artifact`
-(arquivos produzidos; `files[]`) ou `run` (registro de execução de um runner; `meta{}` é
-livre). `output` pode ser truncado em 64 KiB; `output_sha256` é o hash do todo. Um registro
-nunca é editado; correção é registro novo.
+(arquivos produzidos; `files[]`), `run` (registro de execução de um runner; `meta{}` é livre)
+ou `eval` (um número que um harness mediu, abaixo). `output` pode ser truncado em 64 KiB;
+`output_sha256` é o hash do todo. Um registro nunca é editado; correção é registro novo. O
+registro é escrito sem escape de HTML, então um comparador se lê `>=`.
+
+Um registro **`eval`** carrega a medição e a barra que ela precisava vencer, para que o valor
+seja visível, possa ser acompanhado entre execuções e possa barrar um release — um `check`
+esconde os três em um código de saída:
+
+```json
+{
+  "kind": "eval",
+  "metric": "triage_top1",
+  "value": 0.87,
+  "unit": "",
+  "threshold": 0.85,
+  "comparator": ">=",
+  "dataset": { "id": "golden-2026", "sha256": "…" },
+  "passed": true
+}
+```
+
+`metric` são palavras minúsculas unidas por `_`, `-` ou `.`, para que dois harnesses que medem
+a mesma coisa concordem no nome. `comparator` é `>=`, `<=` ou `==` e é **obrigatório** quando
+há `threshold`: comparador adivinhado é portão errado. Registro sem threshold é medição, não
+portão, e passa. `value` e `threshold` são escritos mesmo valendo zero, porque zero é um número
+que interessa a um portão. `dataset` nomeia o conjunto em que a métrica foi medida e guarda o
+hash do **manifesto** dele, nunca do conteúdo: um golden set tem casos reais, e casos reais têm
+dado pessoal. Um `eval` é assinado como qualquer registro.
+
+O `verify` transforma em um registro `eval` toda linha que um check imprime no stdout e que
+seja um objeto JSON com `metric` e `value`, nessa forma pequena — para que um harness em
+qualquer linguagem a emita com um `echo` — e um check que imprime texto comum não muda em nada.
+Um `eval` que falha reprova a verificação mesmo com código de saída 0: é para isso que serve um
+portão. Uma linha cujo `threshold` vem sem comparador é gravada como medição, com o motivo em
+`note` e `passed: false`, em vez de barrar com base em um palpite.
+
+Uma task pode declarar um portão como critério de aceite, `metric: triage_top1 >= 0.85`; ele
+continua sendo um critério em palavras, e o `doctor` aponta o que nenhum `eval` responde depois
+que a task chega a `review`. O pacote de contexto (§6) carrega o último valor de cada métrica.
 
 Um registro `run` pode carregar seu **custo** em campos padrão, para que ledgers de runners
 diferentes conciliem: `provider` (`anthropic`), `model` (`claude-sonnet-5`), `tokens_in`,
@@ -163,7 +200,8 @@ falha a verificação com uma `note` dizendo isso.
 
 O que um agente recebe para uma task, nesta ordem: projeto, constituição, o próprio manifesto,
 a especificação, a task (corpo, o marco dela com o prazo, aceite, os requisitos que ela cobre
-com o texto deles, checks, dependências com status, evidência até aqui),
+com o texto deles, checks, dependências com status, evidência até aqui e o último valor de
+cada métrica),
 todo arquivo de `context/`. Markdown para prompt, JSON para ferramenta. O pacote termina
 dizendo ao agente para não marcar a task como done: isso é decisão do revisor.
 

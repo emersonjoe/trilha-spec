@@ -207,6 +207,8 @@ func (p Problem) String() string {
 		return "milestone " + p.Arg + " has no task"
 	case ProblemMilestonePastDue:
 		return "task past its milestone's due date: " + p.Arg
+	case ProblemMetricNotEvidenced:
+		return "acceptance metric with no eval evidence: " + p.Arg
 	}
 	return p.Code + " " + p.Arg
 }
