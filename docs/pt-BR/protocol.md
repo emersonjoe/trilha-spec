@@ -71,6 +71,7 @@ estável: campos do protocolo primeiro, na ordem abaixo, depois os desconhecidos
 | `covers` | não | IDs de requisito que a task entrega (§11); todos precisam ser declarados por uma spec |
 | `acceptance` | de `ready` em diante | o que precisa ser verdade para fechar, em palavras; um item pode ser um portão métrico, `metric: <nome> <comparador> <número>` (§5) |
 | `checks` | não | comandos que o `verify` roda; programa + argumentos, sem shell |
+| `review` | não | o quórum humano para fechar: `{quorum: N, roles: [uat, legal]}` (§5) |
 | `attempt`, `max_attempts`, `token_budget` | não | limites de execução e metadados da tentativa atual |
 | `retry_of` | não | ID da Run anterior (`run-NNNNNN`) quando esta task é uma correção |
 | `failure_class`, `repair_reason` | não | categoria estável da falha e intenção humana de correção |
@@ -100,6 +101,8 @@ Regras que quem escreve impõe:
 
 - `ready` e `running` exigem pelo menos um critério de aceite.
 - `running` exige toda dependência `done`.
+- `done` exige o quórum de `review` da task (§3), quando ela declara um: N atestações (§5)
+  assinadas e distintas cujo `role` esteja em `roles`. A recusa diz o que falta.
 - Uma task é **executável** quando está `ready` e toda dependência está `done`. `next` lista
   as executáveis em ordem de dependência, empate por ID, e entre elas o prazo de marco (§12)
   mais próximo primeiro; task sem prazo vai por último.
@@ -126,7 +129,8 @@ Um JSON por registro, `evidence/TASK-NNN/NNN-kind.json`, NNN a sequência dentro
 
 `kind` é `check` (um comando rodou), `note` (pessoa ou agente escreveu algo), `artifact`
 (arquivos produzidos; `files[]`), `run` (registro de execução de um runner; `meta{}` é livre)
-ou `eval` (um número que um harness mediu, abaixo). `output` pode ser truncado em 64 KiB;
+`eval` (um número que um harness mediu) ou `attestation` (a decisão de uma pessoa
+nomeada) — os dois últimos abaixo. `output` pode ser truncado em 64 KiB;
 `output_sha256` é o hash do todo. Um registro nunca é editado; correção é registro novo. O
 registro é escrito sem escape de HTML, então um comparador se lê `>=`.
 
@@ -161,6 +165,40 @@ qualquer linguagem a emita com um `echo` — e um check que imprime texto comum 
 Um `eval` que falha reprova a verificação mesmo com código de saída 0: é para isso que serve um
 portão. Uma linha cujo `threshold` vem sem comparador é gravada como medição, com o motivo em
 `note` e `passed: false`, em vez de barrar com base em um palpite.
+
+Um registro **`attestation`** é a decisão de uma pessoa nomeada, não de uma máquina: um aceite
+de UAT, uma homologação jurídica ou de compras, uma tradução validada por falante nativo.
+
+```json
+{
+  "kind": "attestation",
+  "by": "Ana Souza",
+  "role": "uat",
+  "statement": "Homologado em 2027-04-28 com a equipe da prefeitura.",
+  "refs": ["#4", "docs/ata.pdf"],
+  "signature": { "alg": "ed25519", "key_id": "ana", "sig": "…" }
+}
+```
+
+`role` são palavras minúsculas unidas por `-`; `refs` nomeia as sequências de evidência ou os
+caminhos de artefato que a declaração cobre. A chave de uma pessoa é uma chave como a de um
+runner: mora em `keys/<key_id>.pub` e assina do mesmo jeito. Uma atestação **sem assinatura** é
+uma alegação — protocolo válido, mas não faz quórum, porque qualquer um poderia tê-la digitado.
+
+A task declara o que precisa em `review`:
+
+```
+review:
+  quorum: 2
+  roles: [uat, legal]
+```
+
+`review → done` é recusado até existirem `quorum` atestações assinadas, válidas sob uma chave
+de `keys/`, em um dos `roles` e por **chaves distintas** — a mesma pessoa duas vezes continua
+sendo uma pessoa. A recusa diz em qual desses pontos cada registro recusado falhou. O `doctor`
+aponta quórum declarado sem papéis (qualquer papel o satisfaria) e atestação assinada com uma
+chave que o projeto não tem. O pacote de contexto (§6) mostra o que ainda falta. Uma task sem
+`review` fecha exatamente como antes.
 
 Uma task pode declarar um portão como critério de aceite, `metric: triage_top1 >= 0.85`; ele
 continua sendo um critério em palavras, e o `doctor` aponta o que nenhum `eval` responde depois
@@ -201,7 +239,7 @@ falha a verificação com uma `note` dizendo isso.
 O que um agente recebe para uma task, nesta ordem: projeto, constituição, o próprio manifesto,
 a especificação, a task (corpo, o marco dela com o prazo, aceite, os requisitos que ela cobre
 com o texto deles, checks, dependências com status, evidência até aqui e o último valor de
-cada métrica),
+cada métrica e as atestações que ainda faltam),
 todo arquivo de `context/`. Markdown para prompt, JSON para ferramenta. O pacote termina
 dizendo ao agente para não marcar a task como done: isso é decisão do revisor.
 
@@ -228,6 +266,7 @@ network}, `constraints[]`. O protocolo carrega o manifesto; fazê-lo valer é pa
 | `trilha_coverage` | | `spec?`; a matriz de requisitos da §11 |
 | `trilha_move` | sim | `id`, `status` |
 | `trilha_evidence` | sim | `id`, `kind` (note \| artifact), `note?`, `files?`, `by?` |
+| `trilha_attest` | sim | `id`, `by`, `role`, `statement`, `refs?`; gravada sem assinatura |
 | `trilha_verify` | sim | `id`, `by?` |
 | `trilha_spec_move` | sim | `id`, `status` (§11) |
 

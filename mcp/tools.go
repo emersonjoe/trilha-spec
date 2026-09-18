@@ -225,6 +225,23 @@ func Tools(l spec.Layout, write bool) []*Tool {
 			},
 		},
 		&Tool{
+			Name:        "trilha_attest",
+			Description: "Record a human attestation on a task: who attests, in what role, saying what, over which records. It is written unsigned, which makes it a claim: only a signed attestation counts towards a review quorum, and signing needs a private key this server does not hold.",
+			Schema:      json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"},"by":{"type":"string"},"role":{"type":"string"},"statement":{"type":"string"},"refs":{"type":"array","items":{"type":"string"}}},"required":["id","by","role","statement"]}`),
+			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+				var in struct {
+					ID, By, Role, Statement string
+					Refs                    []string
+				}
+				json.Unmarshal(args, &in)
+				e, p, err := task.Record(l, task.Attestation(in.ID, in.By, in.Role, in.Statement, in.Refs...))
+				if err != nil {
+					return "", err
+				}
+				return fmt.Sprintf("recorded #%d at %s (unsigned: it does not count towards a quorum)", e.Seq, p), nil
+			},
+		},
+		&Tool{
 			Name:        "trilha_verify",
 			Description: "Run the checks of a task in the project root, record each as evidence and answer whether all passed. Does not move the task.",
 			Schema:      json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"},"by":{"type":"string"}},"required":["id"]}`),

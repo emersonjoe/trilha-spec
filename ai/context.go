@@ -38,6 +38,9 @@ type Pack struct {
 	// Metrics is the last value of every metric the task has evidence for:
 	// where the numbers stand, without reading every record.
 	Metrics []task.Metric `json:"metrics,omitempty"`
+	// Quorum is what the task still needs from people before it can close:
+	// how many signed attestations, in which roles, and which are in.
+	Quorum *task.Quorum `json:"quorum,omitempty"`
 	// Milestone is the dated point the task belongs to — its own, or the
 	// one of its spec — so the agent knows the calendar it works against.
 	Milestone *spec.Milestone `json:"milestone,omitempty"`
@@ -96,6 +99,9 @@ func Build(l spec.Layout, id string) (*Pack, error) {
 				p.Requirements = append(p.Requirements, spec.Requirement{ID: c})
 			}
 		}
+	}
+	if p.Quorum, err = task.QuorumOf(l, t); err != nil {
+		return nil, err
 	}
 	if p.Project != nil {
 		byID := map[string]*spec.Spec{}
@@ -245,6 +251,21 @@ func (p *Pack) Markdown() string {
 				mark = "✓"
 			}
 			fmt.Fprintf(&b, "- %s %s (#%d)"+nl, mark, m.String(), m.Seq)
+		}
+		b.WriteString(nl)
+	}
+	if p.Quorum != nil {
+		b.WriteString("### Human review required" + nl + nl)
+		fmt.Fprintf(&b, "%d signed attestation(s)", p.Quorum.Required)
+		if len(p.Quorum.Roles) > 0 {
+			fmt.Fprintf(&b, " in roles %s", strings.Join(p.Quorum.Roles, ", "))
+		}
+		fmt.Fprintf(&b, "; %d still missing."+nl, max(p.Quorum.Missing, 0))
+		for _, a := range p.Quorum.Have {
+			fmt.Fprintf(&b, "- ✓ %s as %s (signed by %s)"+nl, a.By, a.Role, a.KeyID)
+		}
+		for _, r := range p.Quorum.Rejected {
+			fmt.Fprintf(&b, "- ✗ %s"+nl, r)
 		}
 		b.WriteString(nl)
 	}

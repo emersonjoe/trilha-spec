@@ -209,6 +209,10 @@ func (p Problem) String() string {
 		return "task past its milestone's due date: " + p.Arg
 	case ProblemMetricNotEvidenced:
 		return "acceptance metric with no eval evidence: " + p.Arg
+	case ProblemQuorumWithoutRoles:
+		return "task " + p.Arg + " asks for a review quorum but names no roles"
+	case ProblemAttestationUnknownKey:
+		return "attestation signed with a key the project does not hold: " + p.Arg
 	}
 	return p.Code + " " + p.Arg
 }

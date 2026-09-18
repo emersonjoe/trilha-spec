@@ -147,4 +147,10 @@ const (
 	// ProblemMetricNotEvidenced: a task on its way out with an acceptance
 	// metric no `eval` record answers. A warning. Arg is "TASK-NNN metric".
 	ProblemMetricNotEvidenced = "metric-not-evidenced"
+	// ProblemQuorumWithoutRoles: a task asking for a quorum but naming no
+	// role, which would let any role satisfy it. Arg is the task id.
+	ProblemQuorumWithoutRoles = "quorum-without-roles"
+	// ProblemAttestationUnknownKey: an attestation signed with a key the
+	// project does not hold. Arg is "TASK-NNN #SEQ key (reason)".
+	ProblemAttestationUnknownKey = "attestation-unknown-key"
 )

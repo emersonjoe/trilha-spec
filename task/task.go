@@ -91,22 +91,25 @@ type Task struct {
 	// Checks are commands that prove the acceptance; `verify` runs them and
 	// records the result as evidence. No shell: a command is a program and
 	// its arguments, split on spaces with double quotes respected.
-	Checks           []string    `json:"checks,omitempty"`
-	ExpectedFiles    []string    `json:"expected_files,omitempty"`
-	Routes           []string    `json:"routes,omitempty"`
-	Scenarios        []string    `json:"scenarios,omitempty"`
-	Accessibility    []string    `json:"accessibility,omitempty"`
-	SecurityControls []string    `json:"security_controls,omitempty"`
-	MaxAttempts      int         `json:"max_attempts,omitempty"`
-	TokenBudget      int         `json:"token_budget,omitempty"`
-	Attempt          int         `json:"attempt,omitempty"`
-	RetryOf          string      `json:"retry_of,omitempty"`
-	FailureClass     string      `json:"failure_class,omitempty"`
-	RepairReason     string      `json:"repair_reason,omitempty"`
-	Created          string      `json:"created,omitempty"`
-	Updated          string      `json:"updated,omitempty"`
-	Body             string      `json:"body,omitempty"`
-	Fields           spec.Fields `json:"-"`
+	Checks []string `json:"checks,omitempty"`
+	// Review is the human quorum this task needs before it can close:
+	// `review: {quorum: 2, roles: [uat, legal]}`.
+	Review           *ReviewPolicy `json:"review,omitempty"`
+	ExpectedFiles    []string      `json:"expected_files,omitempty"`
+	Routes           []string      `json:"routes,omitempty"`
+	Scenarios        []string      `json:"scenarios,omitempty"`
+	Accessibility    []string      `json:"accessibility,omitempty"`
+	SecurityControls []string      `json:"security_controls,omitempty"`
+	MaxAttempts      int           `json:"max_attempts,omitempty"`
+	TokenBudget      int           `json:"token_budget,omitempty"`
+	Attempt          int           `json:"attempt,omitempty"`
+	RetryOf          string        `json:"retry_of,omitempty"`
+	FailureClass     string        `json:"failure_class,omitempty"`
+	RepairReason     string        `json:"repair_reason,omitempty"`
+	Created          string        `json:"created,omitempty"`
+	Updated          string        `json:"updated,omitempty"`
+	Body             string        `json:"body,omitempty"`
+	Fields           spec.Fields   `json:"-"`
 }
 
 var reID = regexp.MustCompile(`^TASK-[0-9]{3,}$`)
@@ -131,6 +134,7 @@ func Parse(src []byte) (*Task, error) {
 		DependsOn:        d.Fields.GetList("depends_on"),
 		Acceptance:       d.Fields.GetList("acceptance"),
 		Checks:           d.Fields.GetList("checks"),
+		Review:           reviewFrom(d.Fields),
 		ExpectedFiles:    d.Fields.GetList("expected_files"),
 		Routes:           d.Fields.GetList("routes"),
 		Scenarios:        d.Fields.GetList("scenarios"),
@@ -181,6 +185,7 @@ func (t *Task) Validate() error {
 	if t.Milestone != "" && !spec.ValidMilestoneID(t.Milestone) {
 		errs = append(errs, fmt.Sprintf("milestone %q is not a milestone id", t.Milestone))
 	}
+	errs = append(errs, t.Review.validate()...)
 	if t.Status == Ready || t.Status == Running {
 		if len(t.Acceptance) == 0 {
 			errs = append(errs, string(t.Status)+" needs at least one acceptance criterion")
@@ -218,6 +223,11 @@ func (t *Task) Bytes() []byte {
 	d.Fields.SetList("depends_on", t.DependsOn)
 	d.Fields.SetList("acceptance", t.Acceptance)
 	d.Fields.SetList("checks", t.Checks)
+	if t.Review != nil {
+		d.Fields.SetFields("review", t.Review.fields())
+	} else {
+		d.Fields.Delete("review")
+	}
 	setListOpt(&d.Fields, "expected_files", t.ExpectedFiles)
 	setListOpt(&d.Fields, "routes", t.Routes)
 	setListOpt(&d.Fields, "scenarios", t.Scenarios)
@@ -244,7 +254,7 @@ func (t *Task) Bytes() []byte {
 	return d.Bytes()
 }
 
-var known = map[string]bool{"id": true, "title": true, "status": true, "spec": true, "milestone": true, "agent": true, "covers": true, "depends_on": true, "acceptance": true, "checks": true, "expected_files": true, "routes": true, "scenarios": true, "accessibility": true, "security_controls": true, "max_attempts": true, "token_budget": true, "attempt": true, "retry_of": true, "failure_class": true, "repair_reason": true, "created": true, "updated": true}
+var known = map[string]bool{"id": true, "title": true, "status": true, "spec": true, "milestone": true, "agent": true, "covers": true, "depends_on": true, "acceptance": true, "checks": true, "review": true, "expected_files": true, "routes": true, "scenarios": true, "accessibility": true, "security_controls": true, "max_attempts": true, "token_budget": true, "attempt": true, "retry_of": true, "failure_class": true, "repair_reason": true, "created": true, "updated": true}
 
 func setOpt(f *spec.Fields, k, v string) {
 	if v != "" {

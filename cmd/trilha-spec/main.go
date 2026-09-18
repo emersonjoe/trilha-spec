@@ -48,6 +48,7 @@ usage: trilha-spec <command> [flags]
   evidence <task-id> [--verify] [--keys DIR]   records; --verify checks signatures against DIR (default .trilha/keys)
   evidence <task-id> add --note TEXT | add --run [--provider P --model M --tokens-in N --tokens-out N --cost C --currency USD]
   evidence <task-id> add --eval --metric M --value V [--unit U] [--threshold T --comparator >=] [--dataset ID [--dataset-sha256 H]]
+  evidence <task-id> add --attestation --by NAME --role R --statement S [--ref X]...   sign it, or it does not make quorum
            [--sign-key FILE [--key-id ID]]   sign the record with an Ed25519 private key
   keygen <key-id> [--out DIR]   an Ed25519 pair: DIR/<key-id>.key (private, default ~/.trilha/keys) and .trilha/keys/<key-id>.pub
   mcp [--write]                 serve the protocol over MCP on stdio
@@ -654,6 +655,11 @@ func cmdEvidence(args []string, out io.Writer) error {
 		cost := fs.Float64("cost", 0, "cost as observed (run)")
 		currency := fs.String("currency", "", "ISO 4217 code of --cost (run)")
 		failed := fs.Bool("failed", false, "the run did not pass")
+		attest := fs.Bool("attestation", false, "a named person attesting, in a role")
+		role := fs.String("role", "", "the role the person attests in (attestation)")
+		statement := fs.String("statement", "", "what the person attests (attestation)")
+		var refs multi
+		fs.Var(&refs, "ref", "evidence seq or artifact path the attestation covers (repeatable)")
 		evalOn := fs.Bool("eval", false, "a measurement with its threshold")
 		metric := fs.String("metric", "", "metric name (eval)")
 		value := fs.String("value", "", "measured value (eval)")
@@ -671,6 +677,16 @@ func cmdEvidence(args []string, out io.Writer) error {
 		if err != nil {
 			return err
 		}
+		if *attest {
+			e, p, err := task.RecordSigned(st.Layout, task.Attestation(id, *by, *role, *statement, refs...), signer)
+			if err != nil {
+				return err
+			}
+			if signer == nil {
+				fmt.Fprint(out, T("note: an unsigned attestation is a claim; it does not count towards a quorum\n"))
+			}
+			return recorded(out, st.Layout, e, p, signer)
+		}
 		if *evalOn {
 			m, err := evalMetric(*metric, *value, *unit, *threshold, *comparator, *datasetID, *datasetSHA)
 			if err != nil {
@@ -683,7 +699,7 @@ func cmdEvidence(args []string, out io.Writer) error {
 			return recorded(out, st.Layout, e, p, signer)
 		}
 		if *note == "" && len(files) == 0 && !*run {
-			return errors.New(T("evidence add needs --note, --file, --run or --eval"))
+			return errors.New(T("evidence add needs --note, --file, --run, --eval or --attestation"))
 		}
 		kind := "note"
 		switch {
@@ -726,6 +742,8 @@ func cmdEvidence(args []string, out io.Writer) error {
 		}
 		what := e.Note
 		switch {
+		case e.Kind == task.KindAttestation:
+			what = e.Role + ": " + e.Statement
 		case e.Kind == task.KindEval:
 			what = strings.TrimSpace(metricSummary(e) + " " + e.Note)
 		case e.Command != "":
@@ -1086,6 +1104,13 @@ func cmdDoctor(args []string, out io.Writer) error {
 			problems = append(problems, err.Error())
 		} else {
 			for _, p := range metrics {
+				add(p)
+			}
+		}
+		if attests, err := task.CheckAttestations(st.Layout, tasks); err != nil {
+			problems = append(problems, err.Error())
+		} else {
+			for _, p := range attests {
 				add(p)
 			}
 		}

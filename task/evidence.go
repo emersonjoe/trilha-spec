@@ -21,12 +21,13 @@ import (
 
 // Evidence is one verifiable fact about a task: a check that ran with its
 // exit code and the hash of what it printed, a note a reviewer left, an
-// artifact an agent produced, a number an evaluation measured. It is JSON on disk, one file per record, so it
-// can be diffed, signed later and read without this package.
+// artifact an agent produced, a number an evaluation measured, a decision a
+// named person attested. It is JSON on disk, one file per record, so it can
+// be diffed, signed later and read without this package.
 type Evidence struct {
 	Task string `json:"task"`
 	Seq  int    `json:"seq"`
-	// Kind: check | note | artifact | run | eval
+	// Kind: check | note | artifact | run | eval | attestation
 	Kind string `json:"kind"`
 	At   string `json:"at"`
 	// By is who produced it: an agent name, a person, "trilha-spec verify".
@@ -42,6 +43,12 @@ type Evidence struct {
 	Passed       bool     `json:"passed"`
 	Note         string   `json:"note,omitempty"`
 	Files        []string `json:"files,omitempty"`
+	// An `attestation` record's decision: who says what, in what capacity,
+	// about which other records. `by` is the person; the signature is what
+	// turns the claim into proof.
+	Role      string   `json:"role,omitempty"`
+	Statement string   `json:"statement,omitempty"`
+	Refs      []string `json:"refs,omitempty"`
 	// An `eval` record's measurement: what was measured, on what, against
 	// what it had to beat. Value and Threshold are pointers because zero is
 	// a number a gate cares about ("WCAG violations == 0").
@@ -114,6 +121,9 @@ func RecordSigned(l spec.Layout, e Evidence, signer *Signer) (Evidence, string, 
 	if err := e.validateEval(); err != nil {
 		return e, "", err
 	}
+	if err := e.validateAttestation(); err != nil {
+		return e, "", err
+	}
 	dir := l.EvidenceDir(e.Task)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return e, "", err
@@ -138,8 +148,8 @@ func RecordSigned(l spec.Layout, e Evidence, signer *Signer) (Evidence, string, 
 			return e, "", err
 		}
 	}
-	// No HTML escaping: a comparator is `>=` on disk, not `>=`. A file
-	// a person cannot read is a file a person will not check.
+	// No HTML escaping: a comparator reads as `>=` on disk rather than as a
+	// unicode escape. A file a person cannot read is one nobody will check.
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)

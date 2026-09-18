@@ -70,6 +70,10 @@ func doctorMessage(p spec.Problem) string {
 		return fmt.Sprintf(T("task past its milestone's due date: %s"), p.Arg)
 	case spec.ProblemMetricNotEvidenced:
 		return fmt.Sprintf(T("acceptance metric with no eval evidence: %s"), p.Arg)
+	case spec.ProblemQuorumWithoutRoles:
+		return fmt.Sprintf(T("task %s asks for a review quorum but names no roles"), p.Arg)
+	case spec.ProblemAttestationUnknownKey:
+		return fmt.Sprintf(T("attestation signed with a key the project does not hold: %s"), p.Arg)
 	}
 	return p.String()
 }
@@ -93,6 +97,7 @@ uso: trilha-spec <comando> [flags]
   evidence <task-id> [--verify] [--keys DIR]   registros; --verify confere assinaturas contra DIR (padrão .trilha/keys)
   evidence <task-id> add --note TEXTO | add --run [--provider P --model M --tokens-in N --tokens-out N --cost C --currency USD]
   evidence <task-id> add --eval --metric M --value V [--unit U] [--threshold T --comparator >=] [--dataset ID [--dataset-sha256 H]]
+  evidence <task-id> add --attestation --by NOME --role R --statement S [--ref X]...   assine, ou não conta para o quórum
            [--sign-key ARQUIVO [--key-id ID]]   assina o registro com uma chave privada Ed25519
   keygen <key-id> [--out DIR]   um par Ed25519: DIR/<key-id>.key (privada, padrão ~/.trilha/keys) e .trilha/keys/<key-id>.pub
   mcp [--write]                 serve o protocolo por MCP em stdio
@@ -159,15 +164,18 @@ var pt = map[string]string{
 	"evidence: %d record(s) in %s\n":                "evidência: %d registro(s) em %s\n",
 	"verification failed":                           "verificação falhou",
 	"usage: trilha-spec evidence <task-id> [add --note TEXT | add --run [--provider P] [--model M] [--tokens-in N] [--tokens-out N] [--cost C --currency USD] [--failed]]": "uso: trilha-spec evidence <task-id> [add --note TEXTO | add --run [--provider P] [--model M] [--tokens-in N] [--tokens-out N] [--cost C --currency USD] [--failed]]",
-	"evidence add needs --note, --file, --run or --eval": "evidence add precisa de --note, --file, --run ou --eval",
-	"evidence add --eval needs --metric and --value":     "evidence add --eval precisa de --metric e --value",
-	"--value %q is not a number":                         "--value %q não é um número",
-	"--threshold %q is not a number":                     "--threshold %q não é um número",
-	"recorded #%d (%s)\n":                                "gravado #%d (%s)\n",
-	"recorded #%d (%s), signed by %s\n":                  "gravado #%d (%s), assinado por %s\n",
-	"--key-id needs --sign-key":                          "--key-id precisa de --sign-key",
-	"%d record(s), %d key(s) in %s\n":                    "%d registro(s), %d chave(s) em %s\n",
-	"%d invalid signature(s)":                            "%d assinatura(s) inválida(s)",
+	"evidence add needs --note, --file, --run, --eval or --attestation":                                                                                                    "evidence add precisa de --note, --file, --run, --eval ou --attestation",
+	"note: an unsigned attestation is a claim; it does not count towards a quorum\n":                                                                                       "atenção: uma atestação sem assinatura é uma alegação; não conta para o quórum\n",
+	"task %s asks for a review quorum but names no roles":                                                                                                                  "a task %s pede quórum de revisão mas não nomeia papéis",
+	"attestation signed with a key the project does not hold: %s":                                                                                                          "atestação assinada com uma chave que o projeto não tem: %s",
+	"evidence add --eval needs --metric and --value":                                                                                                                       "evidence add --eval precisa de --metric e --value",
+	"--value %q is not a number":        "--value %q não é um número",
+	"--threshold %q is not a number":    "--threshold %q não é um número",
+	"recorded #%d (%s)\n":               "gravado #%d (%s)\n",
+	"recorded #%d (%s), signed by %s\n": "gravado #%d (%s), assinado por %s\n",
+	"--key-id needs --sign-key":         "--key-id precisa de --sign-key",
+	"%d record(s), %d key(s) in %s\n":   "%d registro(s), %d chave(s) em %s\n",
+	"%d invalid signature(s)":           "%d assinatura(s) inválida(s)",
 	"usage: trilha-spec keygen <key-id> [--out DIR]   (key-id: lowercase words joined by - or .)": "uso: trilha-spec keygen <key-id> [--out DIR]   (key-id: palavras minúsculas unidas por - ou .)",
 	"%s exists; pick another key id":                                               "%s existe; escolha outro key id",
 	"private key %s (keep it out of the repository)\npublic key  %s (commit it)\n": "chave privada %s (mantenha fora do repositório)\nchave pública %s (commite)\n",

@@ -71,6 +71,7 @@ fields first, in the order below, then unknown fields in the order read.
 | `covers` | no | requirement IDs the task delivers (§11); every one must be declared by a spec |
 | `acceptance` | for `ready` on | what must be true to close, in words; an item may be a metric gate, `metric: <name> <comparator> <number>` (§5) |
 | `checks` | no | commands `verify` runs; program + arguments, no shell |
+| `review` | no | the human quorum needed to close: `{quorum: N, roles: [uat, legal]}` (§5) |
 | `attempt`, `max_attempts`, `token_budget` | no | execution limits and current attempt metadata |
 | `retry_of` | no | the preceding Run ID (`run-NNNNNN`) when this task is a repair |
 | `failure_class`, `repair_reason` | no | stable failure category and human repair intent |
@@ -100,6 +101,8 @@ Rules a writer enforces:
 
 - `ready` and `running` require at least one acceptance criterion.
 - `running` requires every dependency to be `done`.
+- `done` requires the task's `review` quorum (§3), when it declares one: N distinct signed
+  attestations (§5) whose `role` is in `roles`. The refusal names what is missing.
 - A task is **executable** when it is `ready` and every dependency is `done`. `next` lists
   executable tasks in dependency order, ties broken by ID, and among those the nearest
   milestone due date (§12) first; a task with no due date comes last.
@@ -125,8 +128,9 @@ One JSON file per record, `evidence/TASK-NNN/NNN-kind.json`, NNN the sequence wi
 ```
 
 `kind` is `check` (a command ran), `note` (a person or agent wrote something), `artifact`
-(files produced; `files[]`), `run` (a runner's execution record; `meta{}` is free) or `eval`
-(a number a harness measured, below). `output` may be truncated at 64 KiB; `output_sha256`
+(files produced; `files[]`), `run` (a runner's execution record; `meta{}` is free), `eval`
+(a number a harness measured) or `attestation` (a named person's decision) — the last two
+below. `output` may be truncated at 64 KiB; `output_sha256`
 hashes the whole of it. A record is never edited; a correction is a new record. A record is
 written without HTML escaping, so a comparator reads as `>=`.
 
@@ -161,6 +165,40 @@ with one `echo` — and a check that prints plain text is unaffected. A failing 
 verification even when the command exited 0: that is what a gate is for. A line whose
 `threshold` comes without a comparator is recorded as a measurement, with the reason in `note`
 and `passed: false`, rather than gated on a guess.
+
+An **`attestation`** record is a decision by a named person, not a machine: a UAT sign-off, a
+legal or procurement homologation, a translation validated by a native speaker.
+
+```json
+{
+  "kind": "attestation",
+  "by": "Ana Souza",
+  "role": "uat",
+  "statement": "Homologado em 2027-04-28 com a equipe da prefeitura.",
+  "refs": ["#4", "docs/ata.pdf"],
+  "signature": { "alg": "ed25519", "key_id": "ana", "sig": "…" }
+}
+```
+
+`role` is lowercase words joined by `-`; `refs` names the evidence sequences or artifact paths
+the statement covers. A person's key is a key like a runner's: it lives in `keys/<key_id>.pub`
+and signs the record the same way. An **unsigned** attestation is a claim — valid protocol,
+but it does not make quorum, because anyone could have typed it.
+
+A task declares what it needs in `review`:
+
+```
+review:
+  quorum: 2
+  roles: [uat, legal]
+```
+
+`review → done` is refused until there are `quorum` attestations that are signed, valid under
+a key in `keys/`, in one of `roles`, and by **distinct keys** — the same person twice is still
+one person. The refusal says which of those each rejected record failed. `doctor` reports a
+quorum declared with no roles (any role would satisfy it) and an attestation signed with a key
+the project does not hold. The context pack (§6) shows what is still owed. A task with no
+`review` closes exactly as before.
 
 A task may declare a gate as an acceptance criterion, `metric: triage_top1 >= 0.85`; it is
 still a criterion in words, and `doctor` reports one that no `eval` answers once the task
@@ -199,7 +237,7 @@ fails verification with a `note` saying so.
 What an agent receives for a task, in this order: project, constitution, its own manifest,
 the specification, the task (body, its milestone with the due date, acceptance, the
 requirements it covers with their text, checks, dependencies with their status, evidence so
-far and the last value of each metric), every file in `context/`. Markdown for a prompt, JSON for a tool. The pack
+far, the last value of each metric and the attestations still owed), every file in `context/`. Markdown for a prompt, JSON for a tool. The pack
 ends by telling the agent not to mark the task done: that is the reviewer's decision.
 
 ## 7. Agent manifest
@@ -225,6 +263,7 @@ capability `tools` only.
 | `trilha_graph` | | |
 | `trilha_move` | yes | `id`, `status` |
 | `trilha_evidence` | yes | `id`, `kind` (note \| artifact), `note?`, `files?`, `by?` |
+| `trilha_attest` | yes | `id`, `by`, `role`, `statement`, `refs?`; written unsigned |
 | `trilha_verify` | yes | `id`, `by?` |
 | `trilha_spec_move` | yes | `id`, `status` (§11) |
 

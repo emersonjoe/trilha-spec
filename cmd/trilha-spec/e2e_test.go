@@ -591,3 +591,64 @@ func TestEvalEvidenceCLI(t *testing.T) {
 		t.Fatalf("a failing metric must fail verify:\n%s", out)
 	}
 }
+
+// TestAttestationQuorumCLI closes a task the way a public-sector delivery
+// does: two named people, in the roles the task asks for, each signing what
+// they attest.
+func TestAttestationQuorumCLI(t *testing.T) {
+	dir := t.TempDir()
+	keys := filepath.Join(t.TempDir(), "private")
+	must(t, dir, "init", "--name", "homologacao")
+	must(t, dir, "keygen", "ana", "--out", keys)
+	must(t, dir, "keygen", "bruno", "--out", keys)
+	must(t, dir, "task", "add", "PoC do cidadao", "--status", "ready", "--accept", "o cliente aceita")
+	// The policy is front matter a person writes.
+	p := filepath.Join(dir, ".trilha", "tasks", "TASK-001.md")
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(strings.Replace(string(b), "checks: []\n", "checks: []\nreview:\n  quorum: 2\n  roles: [uat, legal]\n", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out := must(t, dir, "task", "show", "TASK-001"); !strings.Contains(out, "review:\n  quorum: 2\n  roles:\n    - uat\n    - legal\n") {
+		t.Fatalf("policy round trip:\n%s", out)
+	}
+	for _, to := range []string{"running", "verify", "review"} {
+		must(t, dir, "task", "move", "TASK-001", to)
+	}
+	// The context pack tells the agent what is still owed.
+	if out := must(t, dir, "context", "TASK-001"); !strings.Contains(out, "### Human review required") || !strings.Contains(out, "2 signed attestation(s) in roles uat, legal; 2 still missing.") {
+		t.Fatalf("context:\n%s", out)
+	}
+	if out, err := cli(t, dir, "task", "move", "TASK-001", "done"); err == nil || !strings.Contains(out, "needs 2 signed attestation(s) in roles uat, legal") {
+		t.Fatalf("closed without attestations:\n%s", out)
+	}
+	// An unsigned attestation is a claim, and the CLI says so.
+	out := must(t, dir, "evidence", "TASK-001", "add", "--attestation", "--by", "Carla", "--role", "uat", "--statement", "parece ok")
+	if !strings.Contains(out, "does not count towards a quorum") {
+		t.Fatalf("unsigned attestation:\n%s", out)
+	}
+	must(t, dir, "evidence", "TASK-001", "add", "--attestation", "--by", "Ana Souza", "--role", "uat",
+		"--statement", "Homologado com a equipe da prefeitura.", "--ref", "#1", "--sign-key", filepath.Join(keys, "ana.key"))
+	if out, err := cli(t, dir, "task", "move", "TASK-001", "done"); err == nil || !strings.Contains(out, "has 1 (ana as uat)") {
+		t.Fatalf("one attestation closed a quorum of two:\n%s", out)
+	}
+	must(t, dir, "evidence", "TASK-001", "add", "--attestation", "--by", "Bruno Lima", "--role", "legal",
+		"--statement", "Sem impedimento juridico.", "--sign-key", filepath.Join(keys, "bruno.key"))
+	must(t, dir, "task", "move", "TASK-001", "done")
+	if out := must(t, dir, "evidence", "TASK-001"); !strings.Contains(out, "✓ attestation Ana Souza            uat: Homologado") {
+		t.Fatalf("evidence:\n%s", out)
+	}
+	if out := must(t, dir, "evidence", "TASK-001", "--verify"); !strings.Contains(out, "valid ana") || !strings.Contains(out, "valid bruno") {
+		t.Fatalf("verify:\n%s", out)
+	}
+	// A quorum with no roles is a fault: any role would satisfy it.
+	must(t, dir, "task", "add", "Sem papeis", "--status", "ready", "--accept", "ok")
+	p2 := filepath.Join(dir, ".trilha", "tasks", "TASK-002.md")
+	b2, _ := os.ReadFile(p2)
+	os.WriteFile(p2, []byte(strings.Replace(string(b2), "checks: []\n", "checks: []\nreview:\n  quorum: 1\n", 1)), 0o644)
+	if out, err := cli(t, dir, "doctor"); err == nil || !strings.Contains(out, "TASK-002 asks for a review quorum but names no roles") {
+		t.Fatalf("doctor:\n%s", out)
+	}
+}
