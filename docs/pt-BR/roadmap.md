@@ -10,7 +10,22 @@ muda (§9 do protocolo).
 ## Em aberto
 
 Nada no momento: `trilha-spec task list --status idea` está vazio. As próximas lacunas virão
-do runner e do control plane usando o protocolo 0.2.
+do runner, do control plane e dos programas usando o protocolo 0.3.
+
+## Entregue na 0.3
+
+Vieram do planejamento de um programa de setor público que atravessa quatro repositórios — o
+app do produto, o framework, o runner e o control plane — e precisa ser auditável pelo
+comprador em todo marco. Cada um é uma spec em `specs/`
+e uma task `done` com evidência.
+
+| Task | Lacuna | Por que importava |
+|---|---|---|
+| TASK-016 · spec 009 · [#10](https://github.com/emersonjoe/trilha-spec/issues/10) | Quando a fonte do escopo é um **documento externo** — a lista de requisitos de um edital, uma lei, um KPI de contrato — nada liga as tasks a ele. | "Quais requisitos estão cobertos, por qual task, com que evidência" era planilha mantida à mão, e é a pergunta que um comprador público faz em todo marco. |
+| TASK-018 · spec 010 · [#12](https://github.com/emersonjoe/trilha-spec/issues/12) | O protocolo tinha status e dependências, mas **nenhum calendário**: não dava para dizer "esta task é do M2, com prazo 2027-04-30". | Um contrato com marcos pagos reportava o cronograma físico-financeiro fora do protocolo. |
+| TASK-014 · spec 011 · [#8](https://github.com/emersonjoe/trilha-spec/issues/8) | Qualidade se mede com **números**, e o único jeito de gravar um era um `check` cujo código de saída o escondia. | O revisor não via o valor, nada o acompanhava entre execuções e um control plane não barrava nada com ele. |
+| TASK-015 · spec 012 · [#9](https://github.com/emersonjoe/trilha-spec/issues/9) | `review → done` era decisão de uma pessoa só, e nada distinguia "alguém digitou uma nota" de "esta pessoa, neste papel, **atesta** isto — e assinou". | Entrega no setor público termina em aceite humano nomeado, às vezes por um comitê. |
+| TASK-017 · spec 013 · [#11](https://github.com/emersonjoe/trilha-spec/issues/11) | `depends_on` era só local, então um programa entre repositórios escrevia as dependências reais em **prosa**. | O `next` oferecia trabalho que não podia começar, e ninguém desenhava o grafo. |
 
 ## Entregue na 0.2
 

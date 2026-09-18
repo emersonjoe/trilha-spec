@@ -18,6 +18,14 @@ type Project struct {
 	DefaultAgent string `json:"default_agent,omitempty"`
 	// Verify lists commands every task runs on top of its own checks.
 	Verify []string `json:"verify,omitempty"`
+	// Milestones are the dated points the programme is paid and reported
+	// against; specs and tasks name one in `milestone`.
+	Milestones []Milestone `json:"milestones,omitempty"`
+	// Repos names the other repositories this one depends on, alias → URL.
+	// A task writes `depends_on: [app:TASK-004]` with one of these
+	// aliases; the URL says which repository that is, and resolving it is
+	// the runner's or the control plane's job.
+	Repos map[string]string `json:"repos,omitempty"`
 	// Limits are the project's envelope: numeric thresholds a runner reads
 	// before it starts a task and a control plane trips on. The protocol
 	// carries them; enforcing them is the runner's job, as with agent
@@ -65,6 +73,8 @@ func ParseProject(src []byte) (*Project, error) {
 		Description:  d.Fields.Get("description"),
 		DefaultAgent: d.Fields.Get("default_agent"),
 		Verify:       d.Fields.GetList("verify"),
+		Milestones:   milestonesFrom(d.Fields),
+		Repos:        d.Fields.GetMap("repos"),
 		Paused:       d.Fields.Get("paused") == "true",
 		PauseReason:  d.Fields.Get("pause_reason"),
 		PausedAt:     d.Fields.Get("paused_at"),
@@ -100,6 +110,15 @@ func (p *Project) Validate() error {
 		}
 		if k == LimitMaxFailureRate && v > 1 {
 			errs = append(errs, "limits.max_failure_rate is a share, 0..1")
+		}
+	}
+	errs = append(errs, validateMilestones(p.Milestones)...)
+	for alias, url := range p.Repos {
+		if !ValidAlias(alias) {
+			errs = append(errs, fmt.Sprintf("repos %q is not an alias (lowercase words joined by - or .)", alias))
+		}
+		if strings.TrimSpace(url) == "" {
+			errs = append(errs, "repos."+alias+" has no url")
 		}
 	}
 	if p.Paused && p.PausedAt == "" {
@@ -145,6 +164,16 @@ func (p *Project) Bytes() []byte {
 	}
 	if p.Verify != nil || d.Fields.Has("verify") {
 		d.Fields.SetList("verify", p.Verify)
+	}
+	if len(p.Milestones) > 0 {
+		d.Fields.SetItems("milestones", milestoneFields(p.Milestones))
+	} else {
+		d.Fields.Delete("milestones")
+	}
+	if len(p.Repos) > 0 {
+		d.Fields.SetMap("repos", p.Repos)
+	} else {
+		d.Fields.Delete("repos")
 	}
 	if len(p.Limits) > 0 {
 		m := make(map[string]string, len(p.Limits))

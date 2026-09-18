@@ -1,0 +1,13 @@
+{
+  "task": "TASK-018",
+  "seq": 2,
+  "kind": "check",
+  "at": "2026-09-18T18:23:16Z",
+  "by": "trilha-spec verify",
+  "command": "go test ./...",
+  "dir": "C:\\Users\\emerson.oliveira\\code\\trilha-spec",
+  "exit_code": 0,
+  "output": "ok  \tgithub.com/emersonjoe/trilha-spec/agent\t0.339s\nok  \tgithub.com/emersonjoe/trilha-spec/ai\t(cached)\nok  \tgithub.com/emersonjoe/trilha-spec/cmd/trilha-spec\t10.551s\nok  \tgithub.com/emersonjoe/trilha-spec/execution\t(cached)\nok  \tgithub.com/emersonjoe/trilha-spec/mcp\t(cached)\nok  \tgithub.com/emersonjoe/trilha-spec/spec\t(cached)\nok  \tgithub.com/emersonjoe/trilha-spec/task\t(cached)\n",
+  "output_sha256": "fd97d231820db8df8661354d6ac74ec272db2a06992528ddc94c9e40e3bff08f",
+  "passed": true
+}

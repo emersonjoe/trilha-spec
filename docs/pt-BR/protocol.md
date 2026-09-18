@@ -1,4 +1,4 @@
-# O protocolo Trilha, versão 0.2
+# O protocolo Trilha, versão 0.3
 
 > [🇺🇸 English](../protocol.md) · 🇧🇷 Português
 
@@ -38,14 +38,22 @@ chave:
   - item
 chave:
   sub: escalar
-  sub: escalar
+  sub: [a, b]
+chave:
+  - sub: escalar
+    sub: escalar
+  - sub: escalar
 ---
 
 Corpo, Markdown livre.
 ```
 
-A gramática é de propósito um subconjunto de YAML: escalares, listas de escalares, mapas de
-escalares de um nível (`chave: {}` é um mapa vazio), comentários `#` e linhas em branco. Entre aspas duplas, `\"` e `\\` são os únicos escapes; aspas simples
+A gramática é de propósito um subconjunto de YAML: escalares, listas de escalares, um **bloco**
+de escalares e listas sob uma chave (`chave: {}` é um bloco vazio), uma **lista de blocos**,
+comentários `#` e linhas em branco. O aninhamento para aí: um bloco tem escalares e listas,
+nunca outro bloco. Um item `- ` que se lê como `sub: valor` sem aspas abre um bloco; um item
+escalar com dois-pontos vai entre aspas, que é como o escritor o emite, e uma lista nunca
+mistura os dois. Entre aspas duplas, `\"` e `\\` são os únicos escapes; aspas simples
 carregam o texto como está. Chave desconhecida é preservada na escrita. A ordem dos campos é
 estável: campos do protocolo primeiro, na ordem abaixo, depois os desconhecidos na ordem lida.
 
@@ -57,10 +65,13 @@ estável: campos do protocolo primeiro, na ordem abaixo, depois os desconhecidos
 | `title` | sim | uma linha |
 | `status` | sim | §4; ausente vale `idea` |
 | `spec` | não | o ID da especificação que implementa |
+| `milestone` | não | o marco (§12) a que pertence; vazio vale o da sua spec |
 | `agent` | não | nome de agente; senão `project.default_agent` |
-| `depends_on` | não | IDs de task; todos precisam existir; sem ciclo |
-| `acceptance` | de `ready` em diante | o que precisa ser verdade para fechar, em palavras |
+| `depends_on` | não | IDs de task, ou `<alias>:TASK-NNN` para outro repositório (§13); o local precisa existir; sem ciclo |
+| `covers` | não | IDs de requisito que a task entrega (§11); todos precisam ser declarados por uma spec |
+| `acceptance` | de `ready` em diante | o que precisa ser verdade para fechar, em palavras; um item pode ser um portão métrico, `metric: <nome> <comparador> <número>` (§5) |
 | `checks` | não | comandos que o `verify` roda; programa + argumentos, sem shell |
+| `review` | não | o quórum humano para fechar: `{quorum: N, roles: [uat, legal]}` (§5) |
 | `attempt`, `max_attempts`, `token_budget` | não | limites de execução e metadados da tentativa atual |
 | `retry_of` | não | ID da Run anterior (`run-NNNNNN`) quando esta task é uma correção |
 | `failure_class`, `repair_reason` | não | categoria estável da falha e intenção humana de correção |
@@ -90,8 +101,11 @@ Regras que quem escreve impõe:
 
 - `ready` e `running` exigem pelo menos um critério de aceite.
 - `running` exige toda dependência `done`.
+- `done` exige o quórum de `review` da task (§3), quando ela declara um: N atestações (§5)
+  assinadas e distintas cujo `role` esteja em `roles`. A recusa diz o que falta.
 - Uma task é **executável** quando está `ready` e toda dependência está `done`. `next` lista
-  as executáveis em ordem de dependência, empate por ID.
+  as executáveis em ordem de dependência, empate por ID, e entre elas o prazo de marco (§12)
+  mais próximo primeiro; task sem prazo vai por último.
 
 ## 5. Evidência
 
@@ -114,9 +128,81 @@ Um JSON por registro, `evidence/TASK-NNN/NNN-kind.json`, NNN a sequência dentro
 ```
 
 `kind` é `check` (um comando rodou), `note` (pessoa ou agente escreveu algo), `artifact`
-(arquivos produzidos; `files[]`) ou `run` (registro de execução de um runner; `meta{}` é
-livre). `output` pode ser truncado em 64 KiB; `output_sha256` é o hash do todo. Um registro
-nunca é editado; correção é registro novo.
+(arquivos produzidos; `files[]`), `run` (registro de execução de um runner; `meta{}` é livre)
+`eval` (um número que um harness mediu) ou `attestation` (a decisão de uma pessoa
+nomeada) — os dois últimos abaixo. `output` pode ser truncado em 64 KiB;
+`output_sha256` é o hash do todo. Um registro nunca é editado; correção é registro novo. O
+registro é escrito sem escape de HTML, então um comparador se lê `>=`.
+
+Um registro **`eval`** carrega a medição e a barra que ela precisava vencer, para que o valor
+seja visível, possa ser acompanhado entre execuções e possa barrar um release — um `check`
+esconde os três em um código de saída:
+
+```json
+{
+  "kind": "eval",
+  "metric": "triage_top1",
+  "value": 0.87,
+  "unit": "",
+  "threshold": 0.85,
+  "comparator": ">=",
+  "dataset": { "id": "golden-2026", "sha256": "…" },
+  "passed": true
+}
+```
+
+`metric` são palavras minúsculas unidas por `_`, `-` ou `.`, para que dois harnesses que medem
+a mesma coisa concordem no nome. `comparator` é `>=`, `<=` ou `==` e é **obrigatório** quando
+há `threshold`: comparador adivinhado é portão errado. Registro sem threshold é medição, não
+portão, e passa. `value` e `threshold` são escritos mesmo valendo zero, porque zero é um número
+que interessa a um portão. `dataset` nomeia o conjunto em que a métrica foi medida e guarda o
+hash do **manifesto** dele, nunca do conteúdo: um golden set tem casos reais, e casos reais têm
+dado pessoal. Um `eval` é assinado como qualquer registro.
+
+O `verify` transforma em um registro `eval` toda linha que um check imprime no stdout e que
+seja um objeto JSON com `metric` e `value`, nessa forma pequena — para que um harness em
+qualquer linguagem a emita com um `echo` — e um check que imprime texto comum não muda em nada.
+Um `eval` que falha reprova a verificação mesmo com código de saída 0: é para isso que serve um
+portão. Uma linha cujo `threshold` vem sem comparador é gravada como medição, com o motivo em
+`note` e `passed: false`, em vez de barrar com base em um palpite.
+
+Um registro **`attestation`** é a decisão de uma pessoa nomeada, não de uma máquina: um aceite
+de UAT, uma homologação jurídica ou de compras, uma tradução validada por falante nativo.
+
+```json
+{
+  "kind": "attestation",
+  "by": "Ana Souza",
+  "role": "uat",
+  "statement": "Homologado em 2027-04-28 com a equipe da prefeitura.",
+  "refs": ["#4", "docs/ata.pdf"],
+  "signature": { "alg": "ed25519", "key_id": "ana", "sig": "…" }
+}
+```
+
+`role` são palavras minúsculas unidas por `-`; `refs` nomeia as sequências de evidência ou os
+caminhos de artefato que a declaração cobre. A chave de uma pessoa é uma chave como a de um
+runner: mora em `keys/<key_id>.pub` e assina do mesmo jeito. Uma atestação **sem assinatura** é
+uma alegação — protocolo válido, mas não faz quórum, porque qualquer um poderia tê-la digitado.
+
+A task declara o que precisa em `review`:
+
+```
+review:
+  quorum: 2
+  roles: [uat, legal]
+```
+
+`review → done` é recusado até existirem `quorum` atestações assinadas, válidas sob uma chave
+de `keys/`, em um dos `roles` e por **chaves distintas** — a mesma pessoa duas vezes continua
+sendo uma pessoa. A recusa diz em qual desses pontos cada registro recusado falhou. O `doctor`
+aponta quórum declarado sem papéis (qualquer papel o satisfaria) e atestação assinada com uma
+chave que o projeto não tem. O pacote de contexto (§6) mostra o que ainda falta. Uma task sem
+`review` fecha exatamente como antes.
+
+Uma task pode declarar um portão como critério de aceite, `metric: triage_top1 >= 0.85`; ele
+continua sendo um critério em palavras, e o `doctor` aponta o que nenhum `eval` responde depois
+que a task chega a `review`. O pacote de contexto (§6) carrega o último valor de cada métrica.
 
 Um registro `run` pode carregar seu **custo** em campos padrão, para que ledgers de runners
 diferentes conciliem: `provider` (`anthropic`), `model` (`claude-sonnet-5`), `tokens_in`,
@@ -151,7 +237,9 @@ falha a verificação com uma `note` dizendo isso.
 ## 6. Pacote de contexto
 
 O que um agente recebe para uma task, nesta ordem: projeto, constituição, o próprio manifesto,
-a especificação, a task (corpo, aceite, checks, dependências com status, evidência até aqui),
+a especificação, a task (corpo, o marco dela com o prazo, aceite, os requisitos que ela cobre
+com o texto deles, checks, dependências com status, evidência até aqui e o último valor de
+cada métrica e as atestações que ainda faltam),
 todo arquivo de `context/`. Markdown para prompt, JSON para ferramenta. O pacote termina
 dizendo ao agente para não marcar a task como done: isso é decisão do revisor.
 
@@ -168,15 +256,17 @@ network}, `constraints[]`. O protocolo carrega o manifesto; fazê-lo valer é pa
 
 | Ferramenta | Escreve? | Argumentos |
 |---|---|---|
-| `trilha_list_tasks` | | `status?` |
+| `trilha_list_tasks` | | `status?`, `milestone?` |
 | `trilha_get_task` | | `id` |
 | `trilha_next` | | — ; projeto pausado (§12) responde erro com o motivo |
 | `trilha_context` | | `id`, `format?` (markdown \| json) |
 | `trilha_graph` | | |
 | `trilha_list_specs` | | `status?` |
 | `trilha_list_evidence` | | `id`; cada registro com seu `verdict` (e `reason` quando inválido) |
+| `trilha_coverage` | | `spec?`; a matriz de requisitos da §11 |
 | `trilha_move` | sim | `id`, `status` |
 | `trilha_evidence` | sim | `id`, `kind` (note \| artifact), `note?`, `files?`, `by?` |
+| `trilha_attest` | sim | `id`, `by`, `role`, `statement`, `refs?`; gravada sem assinatura |
 | `trilha_verify` | sim | `id`, `by?` |
 | `trilha_spec_move` | sim | `id`, `status` (§11) |
 
@@ -184,12 +274,22 @@ Ferramentas de escrita só aparecem com `--write`; ferramenta não listada não 
 
 ## 9. Versionamento
 
-Esta página é a versão 0.2. Mudança de campo, transição ou nome de arquivo sobe a versão e é
-registrada em uma spec em `specs/`. A 0.2 (specs 003–008) acrescentou `rejected`/`superseded`
+Esta página é a versão 0.3. Mudança de campo, transição ou nome de arquivo sobe a versão e é
+registrada em uma spec em `specs/`.
+
+A 0.3 (specs 009–013) saiu do planejamento de um programa de setor público em quatro
+repositórios. Acrescentou rastreabilidade de requisitos (`requirements` na spec, `covers` na
+task), marcos com prazo, o tipo de evidência `eval` para métricas com limiar, o tipo
+`attestation` com quórum de revisão na task, e dependências entre repositórios com um
+`program.md` opcional. A gramática do front matter (§2) ganhou duas formas para isso: um bloco
+pode ter listas, e uma lista pode ter blocos. Toda adição é campo novo opcional, então um
+leitor 0.2 ainda lê um diretório 0.3 — com uma regra nova que quem *escreve* precisa conhecer:
+`review → done` é recusado enquanto um quórum declarado não é atingido (§4).
+
+A 0.2 (specs 003–008) acrescentou `rejected`/`superseded`
 e relações entre specs, impacto de segurança na spec, limites e pausa do projeto, campos de
-custo na evidência `run` e evidência assinada; toda adição é campo novo opcional, então um
-leitor 0.1 ainda lê um diretório 0.2. Leitores devem tolerar campos e tipos de evidência
-desconhecidos.
+custo na evidência `run` e evidência assinada. Leitores devem tolerar campos e tipos de
+evidência desconhecidos.
 
 ## 10. Contrato de execução
 
@@ -208,17 +308,40 @@ Attempt carrega seu custo com os nomes do registro de evidência `run` (§5): `p
 | `title` | sim | uma linha |
 | `status` | sim | abaixo; ausente significa `draft` |
 | `issue` | não | a issue que é a fonte do escopo |
+| `milestone` | não | o marco (§12) a que a spec inteira pertence |
 | `supersedes` | não | IDs de spec que esta substitui; todos precisam existir |
 | `depends_on` | não | IDs de spec em que esta se apoia; todos precisam existir |
 | `assets` | não | o que a mudança toca, para o revisor de segurança: identificadores livres |
 | `trust_boundaries` | não | as fronteiras que ela cruza (`browser → api`) |
 | `controls` | não | os controles que ela afeta (`ASVS V4.1`); identificadores livres |
 | `evidence` | não | comandos que um revisor precisa ver rodar: programa e argumentos, sem shell, como `checks` de task (§3) |
+| `requirements` | não | requisitos externos que esta spec responde, um bloco cada: `id`, `source`, `text` |
 
 Os quatro campos de segurança são o **impacto de segurança** da spec. O protocolo os carrega e
 não julga nada sobre eles: se os controles bastam é decisão do revisor. O pacote de contexto
 (§6) os entrega ao agente ao lado do aceite e dos checks da task; uma spec `approved` que não
 declara nenhum deles é um aviso do `doctor`, não uma falha.
+
+### Requisitos
+
+Quando a fonte do escopo é um documento fora do repositório — a lista de requisitos de um
+edital, um artigo de lei, um KPI de contrato — a spec carrega a referência e as tasks apontam
+de volta para ela:
+
+```
+requirements:
+  - id: D2-R8
+    source: "cp-01-2026#anexo-I"
+    text: informar o cidadao sobre o andamento
+```
+
+Um `id` é identificador livre sem espaço nem vírgula, para que `covers: [D2-R8, D2-R9]` nunca
+parta um ao meio; é único no projeto, porque é por ele que `covers` o nomeia. O protocolo não
+julga `source` nem `text`: carrega, entrega ao agente no pacote de contexto (§6) e responde a
+matriz — requisito → tasks → status → quantidade de evidência — em `spec show --coverage` e em
+`trilha_coverage` (§8). O `doctor` aponta requisito que nenhuma task cobre (aviso: o escopo
+está declarado, o trabalho ainda não foi cortado), task que cobre um id que nenhuma spec
+declara, e o mesmo id declarado por duas specs.
 
 O corpo é a especificação: por quê, o que muda, fora de escopo, aceitação. `draft` está sendo
 escrita; `approved` foi acordada e pode virar tasks; `done` tem toda task entregue; `rejected`
@@ -248,6 +371,8 @@ ferramentas consomem.
 | `description` | não | uma linha |
 | `default_agent` | não | o agente que uma task sem `agent` recebe |
 | `verify` | não | comandos que toda task roda além dos próprios checks |
+| `repos` | não | outros repositórios de que este depende, alias → URL; ver §13 |
+| `milestones` | não | os marcos datados do programa, um bloco cada: `id`, `title`, `due`, `gate` |
 | `limits` | não | um mapa de limiares numéricos, abaixo |
 | `paused` | não | `true` para a fila: `next` não responde nada e diz por quê |
 | `pause_reason` | não | texto livre; `breaker:<limite>` quando um control plane disparou por um limite |
@@ -261,7 +386,76 @@ ferramentas consomem.
 | `max_failure_rate` | uma fração, 0..1, sobre as últimas execuções |
 | `max_repeated_failure_class` | o mesmo `failure_class` tantas vezes seguidas |
 
-O protocolo *carrega* limites e pausa; fazê-los valer — recusar iniciar uma task, parar uma
+### Marcos
+
+Um contrato com marcos pagos, ou um programa reportado contra um calendário, declara-os uma
+vez em `project.md`:
+
+```
+milestones:
+  - id: M2
+    title: PoC entregue
+    due: 2027-04-30
+    gate: aceite do cliente
+```
+
+O `id` segue a regra do id de requisito (§11); `due` é um dia de calendário, `AAAA-MM-DD`, não
+um instante. Uma spec e uma task nomeiam um em `milestone`, e uma task sem o próprio herda o da
+spec, como uma task sem `agent` recebe o `default_agent`. `task list --milestone M2` filtra uma
+listagem; `next` prefere o prazo mais próximo entre o que pode rodar; o pacote de contexto (§6)
+entrega ao agente o marco e a data. O `doctor` aponta marco sem nenhuma task e task não
+concluída com o prazo do marco vencido — os dois como aviso, porque o protocolo reporta o
+calendário e são as pessoas que o mantêm — e, como falha, task ou spec que nomeia um marco que
+o `project.md` não declara. Estimativa, capacidade e quanto vale um marco são assunto do
+control plane.
+
+O protocolo *carrega* limites, marcos e pausa; fazê-los valer — recusar iniciar uma task, parar uma
 tentativa em curso, disparar o disjuntor — é trabalho do runner e do control plane, como com os
 manifestos de agente (§7). O pacote de contexto (§6) inclui `limits` e a pausa, para o agente
 conhecer seu envelope. Todo leitor pode ignorar todos esses campos.
+
+## 13. Programas entre repositórios
+
+Um programa atravessa repositórios — o produto, o framework em que ele roda, o control plane,
+um gateway — e o trabalho de um depende do outro. O `project.md` nomeia os que este repositório
+aponta:
+
+```
+repos:
+  trilha: https://github.com/emersonjoe/trilha
+```
+
+Uma task passa a depender de uma task de lá, `depends_on: [trilha:TASK-004]`. Um alias são
+palavras minúsculas unidas por `-` ou `.`; a URL diz que repositório é aquele, e o `doctor`
+aponta dependência de um alias que `repos` não declara.
+
+Resolver isso é papel de alguém, não do formato. Um leitor responde uma dependência remota a
+partir de um **checkout irmão** (`--repo alias=caminho`, repetível) ou de um control plane que
+responda por ela — a implementação de referência declara isso como interface e não abre socket
+nenhum. Enquanto ninguém responde, a dependência bloqueia a task com o motivo
+`waiting:<alias>:TASK-NNN`: o `next` não a oferece, o `running` a recusa e o `graph` a desenha.
+Uma dependência remota nunca entra na ordem topológica deste repositório, porque não é trabalho
+dele.
+
+Um `program.md` opcional, em um diretório acima dos checkouts, nomeia os repositórios e os
+marcos que eles compartilham:
+
+```
+---
+name: Platform programme
+repos:
+  app: app
+  trilha: trilha
+milestones:
+  - id: M2
+    due: 2027-04-30
+---
+```
+
+Os `repos` dele são caminhos, relativos ao arquivo ou absolutos, então um leitor que acha o
+manifesto resolve os aliases sem que ninguém lhe diga onde nada está; `--repo` continua
+prevalecendo. Ele é encontrado subindo a partir do pai do projeto, não faz parte de `.trilha/`,
+e seus marcos têm a forma da §12. `graph --program` desenha um subgrafo por repositório, com as
+dependências que cruzam entre eles; um repositório que ninguém baixou ainda aparece, como
+aquilo que o trabalho está esperando. Um projeto sem manifesto e sem `repos` nunca percebe nada
+disso.

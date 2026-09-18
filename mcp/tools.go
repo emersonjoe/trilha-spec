@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -19,21 +20,29 @@ func Tools(l spec.Layout, write bool) []*Tool {
 	tools := []*Tool{
 		{
 			Name:        "trilha_list_tasks",
-			Description: "List every task with id, title, status and dependencies. Filter by status with {\"status\": \"ready\"}.",
-			Schema:      json.RawMessage(`{"type":"object","properties":{"status":{"type":"string"}}}`),
+			Description: "List every task with id, title, status, milestone and dependencies. Filter by status with {\"status\": \"ready\"} or by milestone with {\"milestone\": \"M2\"}.",
+			Schema:      json.RawMessage(`{"type":"object","properties":{"status":{"type":"string"},"milestone":{"type":"string"}}}`),
 			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-				var in struct{ Status string }
+				var in struct{ Status, Milestone string }
 				json.Unmarshal(args, &in)
 				tasks, err := st.List()
 				if err != nil {
 					return "", err
 				}
+				byID, err := specsByID(l)
+				if err != nil {
+					return "", err
+				}
 				var out []map[string]any
 				for _, t := range tasks {
+					m := task.MilestoneOf(t, byID)
 					if in.Status != "" && string(t.Status) != in.Status {
 						continue
 					}
-					out = append(out, map[string]any{"id": t.ID, "title": t.Title, "status": t.Status, "depends_on": t.DependsOn, "agent": t.Agent})
+					if in.Milestone != "" && m != in.Milestone {
+						continue
+					}
+					out = append(out, map[string]any{"id": t.ID, "title": t.Title, "status": t.Status, "depends_on": t.DependsOn, "agent": t.Agent, "milestone": m})
 				}
 				return js(out), nil
 			},
@@ -58,16 +67,24 @@ func Tools(l spec.Layout, write bool) []*Tool {
 		},
 		{
 			Name:        "trilha_next",
-			Description: "Answer the tasks that can be picked up now: status ready with every dependency done, in dependency order. A paused project answers an error with the pause reason.",
+			Description: "Answer the tasks that can be picked up now: status ready with every dependency done, nearest milestone due date first, then dependency order. A paused project answers an error with the pause reason.",
 			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-				if p, err := l.LoadProject(); err == nil && p.Paused {
+				p, err := l.LoadProject()
+				if err != nil {
+					return "", err
+				}
+				if p.Paused {
 					return "", fmt.Errorf("project is paused: %s (since %s)", p.PauseReason, p.PausedAt)
 				}
 				g, err := st.Graph()
 				if err != nil {
 					return "", err
 				}
-				return js(g.Ready()), nil
+				byID, err := specsByID(l)
+				if err != nil {
+					return "", err
+				}
+				return js(task.ByDue(g.Ready(), func(t *task.Task) string { return task.MilestoneOf(t, byID) }, p.Due())), nil
 			},
 		},
 		{
@@ -127,8 +144,22 @@ func Tools(l spec.Layout, write bool) []*Tool {
 			},
 		},
 		{
+			Name:        "trilha_coverage",
+			Description: "The requirement traceability matrix: every external requirement a spec declares, the tasks that cover it, their status and how many evidence records each has. Narrow it to one spec with {\"spec\": \"009-name\"}.",
+			Schema:      json.RawMessage(`{"type":"object","properties":{"spec":{"type":"string"}}}`),
+			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+				var in struct{ Spec string }
+				json.Unmarshal(args, &in)
+				rows, err := task.Cover(l, in.Spec)
+				if err != nil {
+					return "", err
+				}
+				return js(rows), nil
+			},
+		},
+		{
 			Name:        "trilha_graph",
-			Description: "The dependency graph as Mermaid.",
+			Description: "The dependency graph as Mermaid. A dependency in another repository is drawn as `alias:TASK-NNN`.",
 			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 				g, err := st.Graph()
 				if err != nil {
@@ -194,6 +225,23 @@ func Tools(l spec.Layout, write bool) []*Tool {
 			},
 		},
 		&Tool{
+			Name:        "trilha_attest",
+			Description: "Record a human attestation on a task: who attests, in what role, saying what, over which records. It is written unsigned, which makes it a claim: only a signed attestation counts towards a review quorum, and signing needs a private key this server does not hold.",
+			Schema:      json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"},"by":{"type":"string"},"role":{"type":"string"},"statement":{"type":"string"},"refs":{"type":"array","items":{"type":"string"}}},"required":["id","by","role","statement"]}`),
+			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+				var in struct {
+					ID, By, Role, Statement string
+					Refs                    []string
+				}
+				json.Unmarshal(args, &in)
+				e, p, err := task.Record(l, task.Attestation(in.ID, in.By, in.Role, in.Statement, in.Refs...))
+				if err != nil {
+					return "", err
+				}
+				return fmt.Sprintf("recorded #%d at %s (unsigned: it does not count towards a quorum)", e.Seq, p), nil
+			},
+		},
+		&Tool{
 			Name:        "trilha_verify",
 			Description: "Run the checks of a task in the project root, record each as evidence and answer whether all passed. Does not move the task.",
 			Schema:      json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"},"by":{"type":"string"}},"required":["id"]}`),
@@ -222,7 +270,24 @@ func Tools(l spec.Layout, write bool) []*Tool {
 	)
 }
 
+// specsByID indexes the specifications, for the fields a task inherits.
+func specsByID(l spec.Layout) (map[string]*spec.Spec, error) {
+	specs, err := l.ListSpecs()
+	if err != nil {
+		return nil, err
+	}
+	return task.SpecsByID(specs), nil
+}
+
+// js renders a tool's answer. No HTML escaping, so a comparator reads as
+// `>=` in the host's transcript.
 func js(v any) string {
-	b, _ := json.MarshalIndent(v, "", "  ")
-	return string(b)
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(v); err != nil {
+		return ""
+	}
+	return strings.TrimRight(b.String(), "\n")
 }

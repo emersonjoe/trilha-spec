@@ -28,6 +28,14 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+// needs skips a test when a program it relies on is not on this machine.
+func needs(t *testing.T, program string) {
+	t.Helper()
+	if _, err := exec.LookPath(program); err != nil {
+		t.Skipf("%s is not on PATH", program)
+	}
+}
+
 func cli(t *testing.T, dir string, args ...string) (string, error) {
 	t.Helper()
 	return cliEnv(t, dir, nil, args...)
@@ -371,7 +379,9 @@ func TestSignedEvidenceCLI(t *testing.T) {
 	if !strings.Contains(out, "private key "+filepath.Join(keys, "runner-01.key")) || !strings.Contains(out, "public key  .trilha/keys/runner-01.pub") {
 		t.Fatalf("keygen:\n%s", out)
 	}
-	if st, err := os.Stat(filepath.Join(keys, "runner-01.key")); err != nil || st.Mode().Perm() != 0o600 {
+	// Windows does not carry Unix permission bits, so the mode is only
+	// checked where it means something.
+	if st, err := os.Stat(filepath.Join(keys, "runner-01.key")); err != nil || (runtime.GOOS != "windows" && st.Mode().Perm() != 0o600) {
 		t.Fatalf("private key: %v %v", err, st)
 	}
 	if out, err := cli(t, dir, "keygen", "runner-01", "--out", keys); err == nil || !strings.Contains(out, "exists; pick another key id") {
@@ -432,5 +442,278 @@ func TestUsage(t *testing.T) {
 	}
 	if out := must(t, t.TempDir(), "version"); !strings.HasPrefix(out, "trilha-spec 0.") {
 		t.Fatalf("version:\n%s", out)
+	}
+}
+
+// TestRequirementCoverageCLI walks the traceability matrix end to end: a spec
+// declares external requirements, tasks cover them, doctor reports the gaps
+// and `spec show --coverage` answers the question a buyer asks.
+func TestRequirementCoverageCLI(t *testing.T) {
+	dir := t.TempDir()
+	must(t, dir, "init", "--name", "edital")
+	must(t, dir, "spec", "new", "Desafio 2")
+	// Requirements are front matter a person writes; the body stays the body.
+	p := filepath.Join(dir, ".trilha", "specs", "001-desafio-2.md")
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	withReqs := strings.Replace(string(b), "status: draft\n",
+		"status: draft\nrequirements:\n  - id: D2-R8\n    source: cp-01-2026\n    text: informar o cidadao\n  - id: D2-R9\n    text: prazo de 24h\n", 1)
+	if err := os.WriteFile(p, []byte(withReqs), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	must(t, dir, "task", "add", "Painel do cidadao", "--spec", "001-desafio-2", "--covers", "D2-R8", "--status", "ready", "--accept", "mostra o andamento")
+	if out := must(t, dir, "task", "show", "TASK-001"); !strings.Contains(out, "covers:\n  - D2-R8\n") {
+		t.Fatalf("covers not written:\n%s", out)
+	}
+	out := must(t, dir, "spec", "show", "001-desafio-2", "--coverage")
+	if !strings.Contains(out, "D2-R8") || !strings.Contains(out, "TASK-001 (ready, 0 ev)") || !strings.Contains(out, "D2-R9") {
+		t.Fatalf("coverage:\n%s", out)
+	}
+	must(t, dir, "evidence", "TASK-001", "add", "--note", "revisado")
+	if out := must(t, dir, "spec", "show", "001-desafio-2", "--coverage", "--json"); !strings.Contains(out, `"evidence": 1`) || !strings.Contains(out, `"id": "D2-R9"`) {
+		t.Fatalf("coverage json:\n%s", out)
+	}
+	// An uncovered requirement is a warning; a task citing an unknown id is a
+	// fault that fails doctor.
+	out = must(t, dir, "doctor")
+	if !strings.Contains(out, "requirement no task covers: 001-desafio-2 D2-R9") {
+		t.Fatalf("doctor warning:\n%s", out)
+	}
+	must(t, dir, "task", "add", "Fora do edital", "--covers", "D9-R9")
+	if out, err := cli(t, dir, "doctor"); err == nil || !strings.Contains(out, "task covers a requirement no spec declares: TASK-002 D9-R9") {
+		t.Fatalf("unknown requirement accepted:\n%s", out)
+	}
+	// The context pack hands the agent the words of the requirement.
+	if out := must(t, dir, "context", "TASK-001"); !strings.Contains(out, "### Requirements covered") || !strings.Contains(out, "**D2-R8** (cp-01-2026) — informar o cidadao") {
+		t.Fatalf("context:\n%s", out)
+	}
+}
+
+// TestMilestonesCLI puts a calendar on the project: `next` prefers the nearest
+// deadline, `task list --milestone` narrows to one, and doctor reports what the
+// schedule says.
+func TestMilestonesCLI(t *testing.T) {
+	dir := t.TempDir()
+	must(t, dir, "init", "--name", "programa")
+	must(t, dir, "project", "milestone", "M1", "--title", "Descoberta", "--due", "2026-01-31")
+	must(t, dir, "project", "milestone", "M2", "--title", "PoC", "--due", "2027-04-30", "--gate", "aceite do cliente")
+	must(t, dir, "project", "milestone", "M3", "--due", "2028-01-01")
+	if out := must(t, dir, "project", "show"); !strings.Contains(out, "milestones:\n  - id: M1\n    title: Descoberta\n    due: 2026-01-31\n") {
+		t.Fatalf("project show:\n%s", out)
+	}
+	if out, err := cli(t, dir, "project", "milestone", "M4", "--due", "30/04/2027"); err == nil || !strings.Contains(out, "is not a date") {
+		t.Fatalf("bad due accepted:\n%s", out)
+	}
+	must(t, dir, "task", "add", "Piloto", "--milestone", "M3", "--status", "ready", "--accept", "ok")
+	must(t, dir, "task", "add", "Entrega", "--milestone", "M2", "--status", "ready", "--accept", "ok")
+	must(t, dir, "task", "add", "Levantamento", "--milestone", "M1", "--status", "ready", "--accept", "ok")
+	must(t, dir, "task", "add", "Sem data", "--status", "ready", "--accept", "ok")
+	// The nearest deadline first; a task with no milestone last.
+	out := must(t, dir, "task", "next")
+	if want := "TASK-003  Levantamento\nTASK-002  Entrega\nTASK-001  Piloto\nTASK-004  Sem data\n"; out != want {
+		t.Fatalf("next:\n%s\nwanted:\n%s", out, want)
+	}
+	if out := must(t, dir, "task", "list", "--milestone", "M2"); !strings.Contains(out, "TASK-002") || strings.Contains(out, "TASK-001") {
+		t.Fatalf("list --milestone:\n%s", out)
+	}
+	// The context pack carries the milestone and its date.
+	if out := must(t, dir, "context", "TASK-002"); !strings.Contains(out, "Milestone: M2, due 2027-04-30 (aceite do cliente)") {
+		t.Fatalf("context:\n%s", out)
+	}
+	if out := must(t, dir, "context", "TASK-002", "--json"); !strings.Contains(out, `"due": "2027-04-30"`) {
+		t.Fatalf("context json:\n%s", out)
+	}
+	// M1 is in the past and its task is not done: a warning, never a failure.
+	out = must(t, dir, "doctor")
+	if !strings.Contains(out, "task past its milestone's due date: TASK-003 M1 2026-01-31") {
+		t.Fatalf("doctor:\n%s", out)
+	}
+	must(t, dir, "project", "milestone", "M3", "-")
+	if out := must(t, dir, "project", "show", "--json"); strings.Contains(out, `"M3"`) {
+		t.Fatalf("milestone not removed:\n%s", out)
+	}
+	// TASK-001 now names a milestone project.md does not declare: a fault.
+	if out, err := cli(t, dir, "doctor"); err == nil || !strings.Contains(out, "milestone project.md does not declare: TASK-001 M3") {
+		t.Fatalf("unknown milestone accepted:\n%s", out)
+	}
+}
+
+// TestEvalEvidenceCLI records numbers instead of hiding them in an exit code:
+// a harness prints one JSON line per metric, verify turns each into an `eval`,
+// and a metric below its threshold fails the verification.
+func TestEvalEvidenceCLI(t *testing.T) {
+	needs(t, "cat")
+	dir := t.TempDir()
+	must(t, dir, "init", "--name", "triagem")
+	// The harness prints one JSON line per metric; a file keeps the shell out
+	// of the way of the quotes.
+	os.WriteFile(filepath.Join(dir, "metrics.txt"), []byte("rodando\n"+
+		`{"metric":"triage_top1","value":0.87,"threshold":0.85,"comparator":">=","dataset":{"id":"golden-2026","sha256":"abc"}}`+"\n"), 0o644)
+	must(t, dir, "task", "add", "Triagem", "--status", "ready",
+		"--accept", "metric: triage_top1 >= 0.85", "--accept", "metric: p95_latency <= 5",
+		"--check", "cat metrics.txt")
+	must(t, dir, "task", "move", "TASK-001", "running")
+	must(t, dir, "task", "move", "TASK-001", "verify")
+	must(t, dir, "verify", "TASK-001")
+	out := must(t, dir, "evidence", "TASK-001")
+	if !strings.Contains(out, "✓ eval     trilha-spec verify   triage_top1 0.87 >= 0.85 on golden-2026") {
+		t.Fatalf("evidence:\n%s", out)
+	}
+	// The record is readable: a comparator is `>=`, not an escape.
+	raw, err := os.ReadFile(filepath.Join(dir, ".trilha", "evidence", "TASK-001", "002-eval.json"))
+	if err != nil || !strings.Contains(string(raw), `"comparator": ">="`) {
+		t.Fatalf("record: %v\n%s", err, raw)
+	}
+	// One gate has no evidence yet: doctor says so once the task is on its way out.
+	if out := must(t, dir, "doctor"); !strings.Contains(out, "acceptance metric with no eval evidence: TASK-001 p95_latency") {
+		t.Fatalf("doctor:\n%s", out)
+	}
+	// A metric added by hand, and the context pack showing where the numbers stand.
+	must(t, dir, "evidence", "TASK-001", "add", "--eval", "--metric", "p95_latency", "--value", "7", "--unit", "s", "--threshold", "5", "--comparator", "<=", "--by", "harness")
+	if out := must(t, dir, "evidence", "TASK-001", "--json"); !strings.Contains(out, `"value": 7`) || !strings.Contains(out, `"comparator": "<="`) {
+		t.Fatalf("evidence json:\n%s", out)
+	}
+	if out := must(t, dir, "context", "TASK-001"); !strings.Contains(out, "### Metrics so far") || !strings.Contains(out, "✗ p95_latency 7 s <= 5") {
+		t.Fatalf("context:\n%s", out)
+	}
+	if out, err := cli(t, dir, "evidence", "TASK-001", "add", "--eval", "--metric", "x_y", "--value", "many"); err == nil || !strings.Contains(out, "is not a number") {
+		t.Fatalf("bad value accepted:\n%s", out)
+	}
+	// A failing gate fails verification even though the command exits 0.
+	os.WriteFile(filepath.Join(dir, "slow.txt"), []byte(`{"metric":"p95_latency","value":7,"threshold":5,"comparator":"<="}`+"\n"), 0o644)
+	must(t, dir, "task", "add", "Latencia", "--status", "ready", "--accept", "metric: p95_latency <= 5",
+		"--check", "cat slow.txt")
+	must(t, dir, "task", "move", "TASK-002", "running")
+	must(t, dir, "task", "move", "TASK-002", "verify")
+	if out, err := cli(t, dir, "verify", "TASK-002"); err == nil || !strings.Contains(out, "TASK-002 is now failed") {
+		t.Fatalf("a failing metric must fail verify:\n%s", out)
+	}
+}
+
+// TestAttestationQuorumCLI closes a task the way a public-sector delivery
+// does: two named people, in the roles the task asks for, each signing what
+// they attest.
+func TestAttestationQuorumCLI(t *testing.T) {
+	dir := t.TempDir()
+	keys := filepath.Join(t.TempDir(), "private")
+	must(t, dir, "init", "--name", "homologacao")
+	must(t, dir, "keygen", "ana", "--out", keys)
+	must(t, dir, "keygen", "bruno", "--out", keys)
+	must(t, dir, "task", "add", "PoC do cidadao", "--status", "ready", "--accept", "o cliente aceita")
+	// The policy is front matter a person writes.
+	p := filepath.Join(dir, ".trilha", "tasks", "TASK-001.md")
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(strings.Replace(string(b), "checks: []\n", "checks: []\nreview:\n  quorum: 2\n  roles: [uat, legal]\n", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out := must(t, dir, "task", "show", "TASK-001"); !strings.Contains(out, "review:\n  quorum: 2\n  roles:\n    - uat\n    - legal\n") {
+		t.Fatalf("policy round trip:\n%s", out)
+	}
+	for _, to := range []string{"running", "verify", "review"} {
+		must(t, dir, "task", "move", "TASK-001", to)
+	}
+	// The context pack tells the agent what is still owed.
+	if out := must(t, dir, "context", "TASK-001"); !strings.Contains(out, "### Human review required") || !strings.Contains(out, "2 signed attestation(s) in roles uat, legal; 2 still missing.") {
+		t.Fatalf("context:\n%s", out)
+	}
+	if out, err := cli(t, dir, "task", "move", "TASK-001", "done"); err == nil || !strings.Contains(out, "needs 2 signed attestation(s) in roles uat, legal") {
+		t.Fatalf("closed without attestations:\n%s", out)
+	}
+	// An unsigned attestation is a claim, and the CLI says so.
+	out := must(t, dir, "evidence", "TASK-001", "add", "--attestation", "--by", "Carla", "--role", "uat", "--statement", "parece ok")
+	if !strings.Contains(out, "does not count towards a quorum") {
+		t.Fatalf("unsigned attestation:\n%s", out)
+	}
+	must(t, dir, "evidence", "TASK-001", "add", "--attestation", "--by", "Ana Souza", "--role", "uat",
+		"--statement", "Homologado com a equipe da prefeitura.", "--ref", "#1", "--sign-key", filepath.Join(keys, "ana.key"))
+	if out, err := cli(t, dir, "task", "move", "TASK-001", "done"); err == nil || !strings.Contains(out, "has 1 (ana as uat)") {
+		t.Fatalf("one attestation closed a quorum of two:\n%s", out)
+	}
+	must(t, dir, "evidence", "TASK-001", "add", "--attestation", "--by", "Bruno Lima", "--role", "legal",
+		"--statement", "Sem impedimento juridico.", "--sign-key", filepath.Join(keys, "bruno.key"))
+	must(t, dir, "task", "move", "TASK-001", "done")
+	if out := must(t, dir, "evidence", "TASK-001"); !strings.Contains(out, "✓ attestation Ana Souza            uat: Homologado") {
+		t.Fatalf("evidence:\n%s", out)
+	}
+	if out := must(t, dir, "evidence", "TASK-001", "--verify"); !strings.Contains(out, "valid ana") || !strings.Contains(out, "valid bruno") {
+		t.Fatalf("verify:\n%s", out)
+	}
+	// A quorum with no roles is a fault: any role would satisfy it.
+	must(t, dir, "task", "add", "Sem papeis", "--status", "ready", "--accept", "ok")
+	p2 := filepath.Join(dir, ".trilha", "tasks", "TASK-002.md")
+	b2, _ := os.ReadFile(p2)
+	os.WriteFile(p2, []byte(strings.Replace(string(b2), "checks: []\n", "checks: []\nreview:\n  quorum: 1\n", 1)), 0o644)
+	if out, err := cli(t, dir, "doctor"); err == nil || !strings.Contains(out, "TASK-002 asks for a review quorum but names no roles") {
+		t.Fatalf("doctor:\n%s", out)
+	}
+}
+
+// TestCrossRepositoryCLI walks a program that spans two repositories: the
+// product waits on the framework, `next` refuses to offer work that cannot
+// start, and `--repo` is what lets it answer.
+func TestCrossRepositoryCLI(t *testing.T) {
+	root := t.TempDir()
+	here := filepath.Join(root, "app")
+	there := filepath.Join(root, "trilha")
+	for _, d := range []string{here, there} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		must(t, d, "init", "--name", filepath.Base(d))
+	}
+	must(t, there, "task", "add", "Framework work", "--status", "ready", "--accept", "ok")
+	// The alias is declared in project.md; the URL says which repository it is.
+	p := filepath.Join(here, ".trilha", "project.md")
+	b, _ := os.ReadFile(p)
+	os.WriteFile(p, []byte(strings.Replace(string(b), "verify: []\n", "verify: []\nrepos:\n  trilha: https://github.com/emersonjoe/trilha\n", 1)), 0o644)
+	must(t, here, "task", "add", "Product work", "--status", "ready", "--accept", "ok", "--depends", "trilha:TASK-001")
+
+	// Nobody to ask: the work waits, and the reason names the repository.
+	if out := must(t, here, "task", "list"); !strings.Contains(out, "waiting:trilha:TASK-001") {
+		t.Fatalf("list:\n%s", out)
+	}
+	if out := must(t, here, "task", "next"); !strings.Contains(out, "nothing ready") {
+		t.Fatalf("next offered unresolved work:\n%s", out)
+	}
+	if out, err := cli(t, here, "task", "move", "TASK-001", "running"); err == nil || !strings.Contains(out, "waiting:trilha:TASK-001") {
+		t.Fatalf("started unresolved work:\n%s", out)
+	}
+	// A sibling checkout answers: the dependency is real, and not done yet.
+	if out := must(t, here, "task", "list", "--repo", "trilha="+there); !strings.Contains(out, "trilha:TASK-001") || strings.Contains(out, "waiting:") {
+		t.Fatalf("list --repo:\n%s", out)
+	}
+	if out, err := cli(t, here, "task", "list", "--repo", "trilha"); err == nil || !strings.Contains(out, "is not alias=path") {
+		t.Fatalf("bad --repo accepted:\n%s", out)
+	}
+	for _, to := range []string{"running", "verify", "review", "done"} {
+		must(t, there, "task", "move", "TASK-001", to)
+	}
+	if out := must(t, here, "task", "next", "--repo", "trilha="+there); !strings.HasPrefix(out, "TASK-001  Product work") {
+		t.Fatalf("next after the other repository closed it:\n%s", out)
+	}
+	if out := must(t, here, "task", "graph"); !strings.Contains(out, `trilha_TASK_001["trilha:TASK-001"] --> TASK_001`) {
+		t.Fatalf("graph:\n%s", out)
+	}
+	// A program manifest above the checkouts resolves the aliases by itself.
+	os.WriteFile(filepath.Join(root, "program.md"),
+		[]byte("---\nname: Platform programme\nrepos:\n  app: app\n  trilha: trilha\nmilestones:\n  - id: M2\n    due: 2027-04-30\n---\n"), 0o644)
+	if out := must(t, here, "task", "next"); !strings.HasPrefix(out, "TASK-001  Product work") {
+		t.Fatalf("the manifest should resolve the alias:\n%s", out)
+	}
+	out := must(t, here, "task", "graph", "--program")
+	for _, want := range []string{"subgraph app", "subgraph trilha", "trilha_TASK_001 --> app_TASK_001"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("program graph missing %q:\n%s", want, out)
+		}
+	}
+	// An alias project.md does not declare is a fault.
+	must(t, here, "task", "add", "Fora", "--depends", "cloud:TASK-001")
+	if out, err := cli(t, here, "doctor"); err == nil || !strings.Contains(out, "does not declare in `repos`: TASK-002 cloud:TASK-001") {
+		t.Fatalf("doctor:\n%s", out)
 	}
 }

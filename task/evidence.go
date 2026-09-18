@@ -21,12 +21,13 @@ import (
 
 // Evidence is one verifiable fact about a task: a check that ran with its
 // exit code and the hash of what it printed, a note a reviewer left, an
-// artifact an agent produced. It is JSON on disk, one file per record, so it
-// can be diffed, signed later and read without this package.
+// artifact an agent produced, a number an evaluation measured, a decision a
+// named person attested. It is JSON on disk, one file per record, so it can
+// be diffed, signed later and read without this package.
 type Evidence struct {
 	Task string `json:"task"`
 	Seq  int    `json:"seq"`
-	// Kind: check | note | artifact | run
+	// Kind: check | note | artifact | run | eval | attestation
 	Kind string `json:"kind"`
 	At   string `json:"at"`
 	// By is who produced it: an agent name, a person, "trilha-spec verify".
@@ -42,6 +43,21 @@ type Evidence struct {
 	Passed       bool     `json:"passed"`
 	Note         string   `json:"note,omitempty"`
 	Files        []string `json:"files,omitempty"`
+	// An `attestation` record's decision: who says what, in what capacity,
+	// about which other records. `by` is the person; the signature is what
+	// turns the claim into proof.
+	Role      string   `json:"role,omitempty"`
+	Statement string   `json:"statement,omitempty"`
+	Refs      []string `json:"refs,omitempty"`
+	// An `eval` record's measurement: what was measured, on what, against
+	// what it had to beat. Value and Threshold are pointers because zero is
+	// a number a gate cares about ("WCAG violations == 0").
+	Metric     string   `json:"metric,omitempty"`
+	Value      *float64 `json:"value,omitempty"`
+	Unit       string   `json:"unit,omitempty"`
+	Threshold  *float64 `json:"threshold,omitempty"`
+	Comparator string   `json:"comparator,omitempty"`
+	Dataset    *Dataset `json:"dataset,omitempty"`
 	// Cost of a `run`, as the runner observed it — the protocol does not
 	// claim it is verified; reconciling it against a provider's invoice is a
 	// control plane's job. The same names are on an execution Attempt.
@@ -102,6 +118,12 @@ func RecordSigned(l spec.Layout, e Evidence, signer *Signer) (Evidence, string, 
 	if err := e.validateCost(); err != nil {
 		return e, "", err
 	}
+	if err := e.validateEval(); err != nil {
+		return e, "", err
+	}
+	if err := e.validateAttestation(); err != nil {
+		return e, "", err
+	}
 	dir := l.EvidenceDir(e.Task)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return e, "", err
@@ -126,12 +148,17 @@ func RecordSigned(l spec.Layout, e Evidence, signer *Signer) (Evidence, string, 
 			return e, "", err
 		}
 	}
-	b, err := json.MarshalIndent(e, "", "  ")
-	if err != nil {
+	// No HTML escaping: a comparator reads as `>=` on disk rather than as a
+	// unicode escape. A file a person cannot read is one nobody will check.
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(e); err != nil {
 		return e, "", err
 	}
 	p := filepath.Join(dir, fmt.Sprintf("%03d-%s.json", e.Seq, e.Kind))
-	return e, p, os.WriteFile(p, append(b, '\n'), 0o644)
+	return e, p, os.WriteFile(p, buf.Bytes(), 0o644)
 }
 
 // ListEvidence answers a task's records in sequence order.
@@ -192,7 +219,9 @@ func RunChecks(ctx context.Context, l spec.Layout, t *Task, dir, by string) (*Ve
 		return v, nil
 	}
 	for _, c := range cmds {
-		e, p, err := Record(l, RunCheck(ctx, t.ID, c, dir, by))
+		check := RunCheck(ctx, t.ID, c, dir, by)
+		metrics := check.Output
+		e, p, err := Record(l, check)
 		if err != nil {
 			return nil, err
 		}
@@ -200,6 +229,31 @@ func RunChecks(ctx context.Context, l spec.Layout, t *Task, dir, by string) (*Ve
 		v.Paths = append(v.Paths, p)
 		if !e.Passed {
 			v.Passed = false
+		}
+		// A harness prints its numbers; each one becomes its own record, so
+		// the value is visible, trendable and gateable instead of hiding in
+		// an exit code. A check that prints plain text is unaffected.
+		for _, line := range strings.Split(metrics, "\n") {
+			m, why, ok := ParseMetricLine(line)
+			if !ok {
+				continue
+			}
+			ev := Eval(t.ID, by, m)
+			ev.Command = c
+			ev.Dir = dir
+			if why != "" {
+				ev.Note = why
+				ev.Passed = false
+			}
+			ev, p, err := Record(l, ev)
+			if err != nil {
+				return nil, err
+			}
+			v.Evidence = append(v.Evidence, ev)
+			v.Paths = append(v.Paths, p)
+			if !ev.Passed {
+				v.Passed = false
+			}
 		}
 	}
 	return v, nil

@@ -1,0 +1,10 @@
+{
+  "task": "TASK-018",
+  "seq": 3,
+  "kind": "note",
+  "at": "2026-09-18T18:23:30Z",
+  "by": "claude-opus-5",
+  "exit_code": 0,
+  "passed": true,
+  "note": "Milestones: project.md milestones[{id,title,due,gate}], milestone on specs and tasks (a task inherits its spec's), task list --milestone, next ordered by the nearest due date, project milestone in the CLI, milestone in the context pack and three doctor checks."
+}

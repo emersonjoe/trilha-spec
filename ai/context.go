@@ -7,6 +7,7 @@
 package ai
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -30,7 +31,20 @@ type Pack struct {
 	// Evidence carries a verdict per record, checked against .trilha/keys:
 	// the agent sees what is proven and what is only claimed.
 	Evidence []task.Checked `json:"evidence,omitempty"`
-	Agent    *agent.Agent   `json:"agent,omitempty"`
+	// Requirements are the external requirements the task covers, with
+	// their text, so the agent reads the scope in the words of the document
+	// it came from.
+	Requirements []spec.Requirement `json:"requirements,omitempty"`
+	// Metrics is the last value of every metric the task has evidence for:
+	// where the numbers stand, without reading every record.
+	Metrics []task.Metric `json:"metrics,omitempty"`
+	// Quorum is what the task still needs from people before it can close:
+	// how many signed attestations, in which roles, and which are in.
+	Quorum *task.Quorum `json:"quorum,omitempty"`
+	// Milestone is the dated point the task belongs to — its own, or the
+	// one of its spec — so the agent knows the calendar it works against.
+	Milestone *spec.Milestone `json:"milestone,omitempty"`
+	Agent     *agent.Agent    `json:"agent,omitempty"`
 	// Context is .trilha/context/*.md, by file name.
 	Context map[string]string `json:"context,omitempty"`
 }
@@ -70,6 +84,37 @@ func Build(l spec.Layout, id string) (*Pack, error) {
 			return nil, err
 		}
 		p.Evidence = keys.CheckAll(evidence)
+		p.Metrics = task.Metrics(evidence)
+	}
+	if len(t.Covers) > 0 {
+		specs, err := l.ListSpecs()
+		if err != nil {
+			return nil, err
+		}
+		declared := task.Requirements(specs)
+		for _, c := range t.Covers {
+			if r, ok := declared[c]; ok {
+				p.Requirements = append(p.Requirements, r)
+			} else {
+				p.Requirements = append(p.Requirements, spec.Requirement{ID: c})
+			}
+		}
+	}
+	if p.Quorum, err = task.QuorumOf(l, t); err != nil {
+		return nil, err
+	}
+	if p.Project != nil {
+		byID := map[string]*spec.Spec{}
+		if p.Spec != nil {
+			byID[p.Spec.ID] = p.Spec
+		}
+		if id := task.MilestoneOf(t, byID); id != "" {
+			if m, ok := p.Project.Milestone(id); ok {
+				p.Milestone = &m
+			} else {
+				p.Milestone = &spec.Milestone{ID: id}
+			}
+		}
 	}
 	name := t.Agent
 	if name == "" {
@@ -99,9 +144,16 @@ func Build(l spec.Layout, id string) (*Pack, error) {
 }
 
 // JSON renders the pack for a tool.
+// No HTML escaping: a comparator is `>=` in the pack, as it is in the record.
 func (p *Pack) JSON() []byte {
-	b, _ := json.MarshalIndent(p, "", "  ")
-	return append(b, '\n')
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(p); err != nil {
+		return nil
+	}
+	return b.Bytes()
 }
 
 // Markdown renders the pack as a prompt: the fixed order below is the order
@@ -113,6 +165,15 @@ func (p *Pack) Markdown() string {
 	fmt.Fprintf(&b, "Status: %s", p.Task.Status)
 	if p.Agent != nil {
 		fmt.Fprintf(&b, " · Agent: %s", p.Agent.Name)
+	}
+	if p.Milestone != nil {
+		fmt.Fprintf(&b, " · Milestone: %s", p.Milestone.ID)
+		if p.Milestone.Due != "" {
+			fmt.Fprintf(&b, ", due %s", p.Milestone.Due)
+		}
+		if p.Milestone.Gate != "" {
+			fmt.Fprintf(&b, " (%s)", p.Milestone.Gate)
+		}
 	}
 	b.WriteString("\n\n")
 	if p.Project != nil && (p.Project.Name != "" || p.Project.Body != "") {
@@ -168,6 +229,46 @@ func (p *Pack) Markdown() string {
 		b.WriteString(body + "\n\n")
 	}
 	list(&b, "Acceptance criteria", p.Task.Acceptance)
+	if len(p.Requirements) > 0 {
+		b.WriteString("### Requirements covered\n\n")
+		for _, r := range p.Requirements {
+			fmt.Fprintf(&b, "- **%s**", r.ID)
+			if r.Source != "" {
+				fmt.Fprintf(&b, " (%s)", r.Source)
+			}
+			if r.Text != "" {
+				b.WriteString(" — " + r.Text)
+			}
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+	}
+	if len(p.Metrics) > 0 {
+		b.WriteString("### Metrics so far" + nl + nl)
+		for _, m := range p.Metrics {
+			mark := "✗"
+			if m.Passed {
+				mark = "✓"
+			}
+			fmt.Fprintf(&b, "- %s %s (#%d)"+nl, mark, m.String(), m.Seq)
+		}
+		b.WriteString(nl)
+	}
+	if p.Quorum != nil {
+		b.WriteString("### Human review required" + nl + nl)
+		fmt.Fprintf(&b, "%d signed attestation(s)", p.Quorum.Required)
+		if len(p.Quorum.Roles) > 0 {
+			fmt.Fprintf(&b, " in roles %s", strings.Join(p.Quorum.Roles, ", "))
+		}
+		fmt.Fprintf(&b, "; %d still missing."+nl, max(p.Quorum.Missing, 0))
+		for _, a := range p.Quorum.Have {
+			fmt.Fprintf(&b, "- ✓ %s as %s (signed by %s)"+nl, a.By, a.Role, a.KeyID)
+		}
+		for _, r := range p.Quorum.Rejected {
+			fmt.Fprintf(&b, "- ✗ %s"+nl, r)
+		}
+		b.WriteString(nl)
+	}
 	if len(p.Task.Checks) > 0 {
 		b.WriteString("### Checks that will run\n\n")
 		for _, c := range p.Task.Checks {
@@ -223,6 +324,9 @@ func (p *Pack) Markdown() string {
 	b.WriteString("Make every acceptance criterion true, run the checks, and report what changed and where the proof is. Do not mark the task done: that is the reviewer's decision, taken from the evidence.\n")
 	return b.String()
 }
+
+// nl keeps the renderer readable where a literal escape would be noise.
+const nl = "\n"
 
 func list(b *strings.Builder, title string, items []string) {
 	if len(items) == 0 {

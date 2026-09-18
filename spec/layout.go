@@ -195,6 +195,26 @@ func (p Problem) String() string {
 		return "spec " + p.Arg + " is superseded but no spec names it in `supersedes`"
 	case ProblemSpecNoSecurity:
 		return "spec " + p.Arg + " is approved but declares no security impact (assets, trust_boundaries, controls, evidence)"
+	case ProblemRequirementDuplicate:
+		return "requirement declared by more than one spec: " + p.Arg
+	case ProblemRequirementUnknown:
+		return "task covers a requirement no spec declares: " + p.Arg
+	case ProblemRequirementUncovered:
+		return "requirement no task covers: " + p.Arg
+	case ProblemMilestoneUnknown:
+		return "milestone project.md does not declare: " + p.Arg
+	case ProblemMilestoneEmpty:
+		return "milestone " + p.Arg + " has no task"
+	case ProblemMilestonePastDue:
+		return "task past its milestone's due date: " + p.Arg
+	case ProblemMetricNotEvidenced:
+		return "acceptance metric with no eval evidence: " + p.Arg
+	case ProblemQuorumWithoutRoles:
+		return "task " + p.Arg + " asks for a review quorum but names no roles"
+	case ProblemAttestationUnknownKey:
+		return "attestation signed with a key the project does not hold: " + p.Arg
+	case ProblemRepoUnknown:
+		return "dependency on a repository project.md does not declare in `repos`: " + p.Arg
 	}
 	return p.Code + " " + p.Arg
 }

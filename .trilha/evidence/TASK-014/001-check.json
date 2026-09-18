@@ -1,0 +1,12 @@
+{
+  "task": "TASK-014",
+  "seq": 1,
+  "kind": "check",
+  "at": "2026-09-18T18:35:00Z",
+  "by": "trilha-spec verify",
+  "command": "go vet ./...",
+  "dir": "C:\\Users\\emerson.oliveira\\code\\trilha-spec",
+  "exit_code": 0,
+  "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "passed": true
+}

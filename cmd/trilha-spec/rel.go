@@ -3,11 +3,13 @@ package main
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/emersonjoe/trilha-spec/spec"
+	"github.com/emersonjoe/trilha-spec/task"
 )
 
 func relPath(root, p string) (string, error) {
@@ -57,6 +59,43 @@ func (b body) read() (string, error) {
 	}
 	raw, err := os.ReadFile(*b.file)
 	return string(raw), err
+}
+
+// repoFlag collects `--repo alias=path`: where a sibling checkout of another
+// repository is, so a remote dependency can be answered from disk. Without
+// one, the dependency stays unresolved and the task stays blocked, which is
+// the honest answer.
+func repoFlag(fs *flag.FlagSet) *multi {
+	var m multi
+	fs.Var(&m, "repo", "alias=path of a sibling checkout (repeatable)")
+	return &m
+}
+
+// checkouts resolves the aliases a programme manifest names, then the ones
+// given on the command line, which win.
+func checkouts(l spec.Layout, repos multi) (task.Checkouts, error) {
+	out := task.Checkouts{}
+	prog, err := l.FindProgram()
+	if err != nil {
+		return nil, err
+	}
+	if prog != nil {
+		for alias, dir := range prog.Checkouts() {
+			out[alias] = dir
+		}
+	}
+	for _, r := range repos {
+		alias, path, ok := task.ParseCheckout(r)
+		if !ok {
+			return nil, fmt.Errorf(T("--repo %q is not alias=path"), r)
+		}
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			return nil, err
+		}
+		out[alias] = abs
+	}
+	return out, nil
 }
 
 // security collects the security-impact flags `spec new` and `spec set`

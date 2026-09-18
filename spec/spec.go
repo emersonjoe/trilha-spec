@@ -63,6 +63,9 @@ type Spec struct {
 	Title  string `json:"title"`
 	Status Status `json:"status"`
 	Issue  string `json:"issue,omitempty"`
+	// Milestone is the dated point this spec belongs to (§12); a task
+	// without one of its own inherits it.
+	Milestone string `json:"milestone,omitempty"`
 	// Supersedes names the specs this one replaces; each of them is
 	// `superseded`, and a `superseded` spec is named by exactly this field of
 	// its successor.
@@ -78,8 +81,11 @@ type Spec struct {
 	// Evidence lists the commands a reviewer must see run before the spec is
 	// done: program and arguments, never a shell, exactly like task checks.
 	Evidence []string `json:"evidence,omitempty"`
-	Body     string   `json:"body,omitempty"`
-	Fields   Fields   `json:"-"`
+	// Requirements are the external requirements this spec answers, one
+	// block each; tasks point back at them with `covers`.
+	Requirements []Requirement `json:"requirements,omitempty"`
+	Body         string        `json:"body,omitempty"`
+	Fields       Fields        `json:"-"`
 }
 
 // HasSecurityImpact answers whether the spec declares any of the security
@@ -105,12 +111,14 @@ func ParseSpec(src []byte) (*Spec, error) {
 		Title:           d.Fields.Get("title"),
 		Status:          Status(d.Fields.Get("status")),
 		Issue:           d.Fields.Get("issue"),
+		Milestone:       d.Fields.Get("milestone"),
 		Supersedes:      d.Fields.GetList("supersedes"),
 		DependsOn:       d.Fields.GetList("depends_on"),
 		Assets:          d.Fields.GetList("assets"),
 		TrustBoundaries: d.Fields.GetList("trust_boundaries"),
 		Controls:        d.Fields.GetList("controls"),
 		Evidence:        d.Fields.GetList("evidence"),
+		Requirements:    requirementsFrom(d.Fields),
 		Body:            d.Body,
 		Fields:          d.Fields,
 	}
@@ -150,6 +158,10 @@ func (s *Spec) Validate() error {
 			}
 		}
 	}
+	if s.Milestone != "" && !ValidMilestoneID(s.Milestone) {
+		errs = append(errs, fmt.Sprintf("milestone %q is not a milestone id", s.Milestone))
+	}
+	errs = append(errs, validateRequirements(s.Requirements)...)
 	sort.Strings(errs)
 	if len(errs) > 0 {
 		return errors.New("spec " + s.ID + ": " + strings.Join(errs, "; "))
@@ -180,6 +192,11 @@ func (s *Spec) Bytes() []byte {
 	} else {
 		d.Fields.Delete("issue")
 	}
+	if s.Milestone != "" {
+		d.Fields.Set("milestone", s.Milestone)
+	} else {
+		d.Fields.Delete("milestone")
+	}
 	// Fixed order, so a spec written twice is the same bytes.
 	for _, kv := range []struct {
 		k string
@@ -190,6 +207,11 @@ func (s *Spec) Bytes() []byte {
 		} else {
 			d.Fields.Delete(kv.k)
 		}
+	}
+	if len(s.Requirements) > 0 {
+		d.Fields.SetItems("requirements", requirementFields(s.Requirements))
+	} else {
+		d.Fields.Delete("requirements")
 	}
 	return d.Bytes()
 }
@@ -218,7 +240,7 @@ const (
 )
 
 // warnings are the problem codes doctor reports without failing.
-var warnings = map[string]bool{ProblemSpecNoSecurity: true}
+var warnings = map[string]bool{ProblemSpecNoSecurity: true, ProblemRequirementUncovered: true, ProblemMilestoneEmpty: true, ProblemMilestonePastDue: true, ProblemMetricNotEvidenced: true}
 
 // Warning answers whether the problem is advice rather than a fault.
 func (p Problem) Warning() bool { return warnings[p.Code] }

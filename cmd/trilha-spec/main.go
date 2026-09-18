@@ -27,7 +27,7 @@ import (
 	"github.com/emersonjoe/trilha-spec/task"
 )
 
-const version = "0.2.0"
+const version = "0.3.0"
 
 const usage = `trilha-spec ` + version + ` — the open protocol for work agents can execute
 
@@ -35,17 +35,21 @@ usage: trilha-spec <command> [flags]
 
   init [dir]                    create .trilha/ (project, constitution, agents)
   spec new <title> [--issue N] [--body TEXT | --body-file PATH] [--asset A]... [--boundary B]... [--control C]... [--evidence CMD]...
-  spec list [--status S] | show <id> | move <id> <status>
+  spec list [--status S] | show <id> [--coverage] | move <id> <status>
   spec set <id> [--issue N] [--supersedes A,B] [--depends A,B] [--asset A]... [--boundary B]... [--control C]... [--evidence CMD]...
-  task add <title> [--spec ID] [--depends A,B] [--agent N] [--status S] [--accept C]... [--check CMD]...
+  task add <title> [--spec ID] [--depends A,B] [--agent N] [--status S] [--covers R,S] [--milestone M] [--accept C]... [--check CMD]...
            [--body TEXT | --body-file PATH]   (PATH "-" reads stdin)
-  task list [--status S] | show <id> | next | move <id> <status> | graph [--dot]
+  task list [--status S] [--milestone M] | show <id> | next | move <id> <status> | graph [--dot] [--program]
+           list, next, graph and doctor take --repo alias=path (repeatable) for a sibling checkout
   agent list | show <name>
   project show | pause [--reason R] | resume | limit <key> <value|->
+  project milestone <id> [--title T] [--due YYYY-MM-DD] [--gate G] | <id> -
   context <task-id>             the context pack an agent receives (--json for tools)
   verify <task-id> [--dir D]    run the task's checks and record evidence
   evidence <task-id> [--verify] [--keys DIR]   records; --verify checks signatures against DIR (default .trilha/keys)
   evidence <task-id> add --note TEXT | add --run [--provider P --model M --tokens-in N --tokens-out N --cost C --currency USD]
+  evidence <task-id> add --eval --metric M --value V [--unit U] [--threshold T --comparator >=] [--dataset ID [--dataset-sha256 H]]
+  evidence <task-id> add --attestation --by NAME --role R --statement S [--ref X]...   sign it, or it does not make quorum
            [--sign-key FILE [--key-id ID]]   sign the record with an Ed25519 private key
   keygen <key-id> [--out DIR]   an Ed25519 pair: DIR/<key-id>.key (private, default ~/.trilha/keys) and .trilha/keys/<key-id>.pub
   mcp [--write]                 serve the protocol over MCP on stdio
@@ -123,8 +127,11 @@ func store() (*task.Store, error) {
 	return task.Open(cwd)
 }
 
+// printJSON writes a value for a tool to read. No HTML escaping: a
+// comparator is `>=`, not `>=`, and the protocol is meant to be read.
 func printJSON(out io.Writer, v any) error {
 	enc := json.NewEncoder(out)
+	enc.SetEscapeHTML(false)
 	enc.SetIndent("", "  ")
 	return enc.Encode(v)
 }
@@ -281,6 +288,7 @@ func cmdSpec(args []string, out io.Writer) error {
 	case "show":
 		fs := flags("spec show")
 		asJSON := fs.Bool("json", false, "")
+		coverage := fs.Bool("coverage", false, "the requirement → tasks → status → evidence matrix")
 		pos, err := parse(fs, args[1:])
 		if err != nil {
 			return err
@@ -291,6 +299,13 @@ func cmdSpec(args []string, out io.Writer) error {
 		s, err := l.LoadSpec(pos[0])
 		if err != nil {
 			return err
+		}
+		if *coverage {
+			rows, err := task.Cover(l, s.ID)
+			if err != nil {
+				return err
+			}
+			return printCoverage(out, rows, *asJSON)
 		}
 		if *asJSON {
 			return printJSON(out, s)
@@ -315,6 +330,8 @@ func cmdTask(args []string, out io.Writer) error {
 		specID := fs.String("spec", "", "specification id")
 		deps := fs.String("depends", "", "comma-separated task ids")
 		ag := fs.String("agent", "", "agent name")
+		covers := fs.String("covers", "", "comma-separated requirement ids this task delivers")
+		milestone := fs.String("milestone", "", "milestone id from project.md")
 		status := fs.String("status", string(task.Idea), "initial status")
 		var accept, checks multi
 		fs.Var(&accept, "accept", "acceptance criterion (repeatable)")
@@ -340,6 +357,8 @@ func cmdTask(args []string, out io.Writer) error {
 			t.Checks = checks
 			t.Body = text
 			t.DependsOn = splitList(*deps)
+			t.Covers = splitList(*covers)
+			t.Milestone = *milestone
 		})
 		if err != nil {
 			return err
@@ -354,7 +373,12 @@ func cmdTask(args []string, out io.Writer) error {
 		fs := flags("task list")
 		asJSON := fs.Bool("json", false, "")
 		status := fs.String("status", "", "filter by status")
+		milestone := fs.String("milestone", "", "filter by milestone, the task's own or its spec's")
+		repos := repoFlag(fs)
 		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if st.Remote, err = checkouts(st.Layout, *repos); err != nil {
 			return err
 		}
 		tasks, err := st.List()
@@ -365,11 +389,19 @@ func cmdTask(args []string, out io.Writer) error {
 		if err != nil {
 			return err
 		}
+		byID, err := specIndex(st.Layout)
+		if err != nil {
+			return err
+		}
 		var kept []*task.Task
 		for _, t := range tasks {
-			if *status == "" || string(t.Status) == *status {
-				kept = append(kept, t)
+			if *status != "" && string(t.Status) != *status {
+				continue
 			}
+			if *milestone != "" && task.MilestoneOf(t, byID) != *milestone {
+				continue
+			}
+			kept = append(kept, t)
 		}
 		if *asJSON {
 			return printJSON(out, kept)
@@ -401,7 +433,11 @@ func cmdTask(args []string, out io.Writer) error {
 	case "next":
 		fs := flags("task next")
 		asJSON := fs.Bool("json", false, "")
+		repos := repoFlag(fs)
 		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if st.Remote, err = checkouts(st.Layout, *repos); err != nil {
 			return err
 		}
 		g, err := st.Graph()
@@ -409,16 +445,25 @@ func cmdTask(args []string, out io.Writer) error {
 			return err
 		}
 		ready := g.Ready()
+		// Among what can run, the nearest deadline comes first; the rest of
+		// the order is the dependency order it already had.
+		byID, err := specIndex(st.Layout)
+		if err != nil {
+			return err
+		}
 		// A paused project answers nothing and says why. The list stays a
 		// list for tools; the reason goes to stderr, and `project show --json`
 		// has it in full.
-		if p, err := st.Layout.LoadProject(); err == nil && p.Paused {
-			ready = nil
-			if !*asJSON {
-				fmt.Fprintf(out, T("project is paused: %s\n"), pauseReason(p))
-				return nil
+		if p, err := st.Layout.LoadProject(); err == nil {
+			ready = task.ByDue(ready, func(t *task.Task) string { return task.MilestoneOf(t, byID) }, p.Due())
+			if p.Paused {
+				ready = nil
+				if !*asJSON {
+					fmt.Fprintf(out, T("project is paused: %s\n"), pauseReason(p))
+					return nil
+				}
+				fmt.Fprintf(os.Stderr, T("project is paused: %s\n"), pauseReason(p))
 			}
-			fmt.Fprintf(os.Stderr, T("project is paused: %s\n"), pauseReason(p))
 		}
 		if *asJSON {
 			if ready == nil {
@@ -447,9 +492,28 @@ func cmdTask(args []string, out io.Writer) error {
 	case "graph":
 		fs := flags("task graph")
 		dot := fs.Bool("dot", false, "Graphviz instead of Mermaid")
+		program := fs.Bool("program", false, "every repository of the program manifest, one subgraph each")
+		repos := repoFlag(fs)
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
+		resolved, err := checkouts(st.Layout, *repos)
+		if err != nil {
+			return err
+		}
+		if *program {
+			prog, err := st.Layout.FindProgram()
+			if err != nil {
+				return err
+			}
+			g, err := task.ProgramGraph(st.Layout, prog, resolved)
+			if err != nil {
+				return err
+			}
+			fmt.Fprint(out, g)
+			return nil
+		}
+		st.Remote = resolved
 		g, err := st.Graph()
 		if err != nil {
 			return err
@@ -619,6 +683,19 @@ func cmdEvidence(args []string, out io.Writer) error {
 		cost := fs.Float64("cost", 0, "cost as observed (run)")
 		currency := fs.String("currency", "", "ISO 4217 code of --cost (run)")
 		failed := fs.Bool("failed", false, "the run did not pass")
+		attest := fs.Bool("attestation", false, "a named person attesting, in a role")
+		role := fs.String("role", "", "the role the person attests in (attestation)")
+		statement := fs.String("statement", "", "what the person attests (attestation)")
+		var refs multi
+		fs.Var(&refs, "ref", "evidence seq or artifact path the attestation covers (repeatable)")
+		evalOn := fs.Bool("eval", false, "a measurement with its threshold")
+		metric := fs.String("metric", "", "metric name (eval)")
+		value := fs.String("value", "", "measured value (eval)")
+		unit := fs.String("unit", "", "unit of the value (eval)")
+		threshold := fs.String("threshold", "", "what the value must beat (eval)")
+		comparator := fs.String("comparator", task.AtLeast, "how to read the threshold: >=, <=, == (eval)")
+		datasetID := fs.String("dataset", "", "id of the set the metric was measured on (eval)")
+		datasetSHA := fs.String("dataset-sha256", "", "sha256 of the dataset manifest, never its content (eval)")
 		signKey := fs.String("sign-key", "", "PEM Ed25519 private key to sign the record with")
 		keyID := fs.String("key-id", "", "key id of --sign-key (default: its file name)")
 		if err := fs.Parse(args[2:]); err != nil {
@@ -628,8 +705,29 @@ func cmdEvidence(args []string, out io.Writer) error {
 		if err != nil {
 			return err
 		}
+		if *attest {
+			e, p, err := task.RecordSigned(st.Layout, task.Attestation(id, *by, *role, *statement, refs...), signer)
+			if err != nil {
+				return err
+			}
+			if signer == nil {
+				fmt.Fprint(out, T("note: an unsigned attestation is a claim; it does not count towards a quorum\n"))
+			}
+			return recorded(out, st.Layout, e, p, signer)
+		}
+		if *evalOn {
+			m, err := evalMetric(*metric, *value, *unit, *threshold, *comparator, *datasetID, *datasetSHA)
+			if err != nil {
+				return err
+			}
+			e, p, err := task.RecordSigned(st.Layout, task.Eval(id, *by, m), signer)
+			if err != nil {
+				return err
+			}
+			return recorded(out, st.Layout, e, p, signer)
+		}
 		if *note == "" && len(files) == 0 && !*run {
-			return errors.New(T("evidence add needs --note, --file or --run"))
+			return errors.New(T("evidence add needs --note, --file, --run, --eval or --attestation"))
 		}
 		kind := "note"
 		switch {
@@ -643,12 +741,7 @@ func cmdEvidence(args []string, out io.Writer) error {
 		if err != nil {
 			return err
 		}
-		if signer != nil {
-			fmt.Fprintf(out, T("recorded #%d (%s), signed by %s\n"), e.Seq, rel(st.Layout, p), signer.KeyID)
-			return nil
-		}
-		fmt.Fprintf(out, T("recorded #%d (%s)\n"), e.Seq, rel(st.Layout, p))
-		return nil
+		return recorded(out, st.Layout, e, p, signer)
 	}
 	fs := flags("evidence")
 	asJSON := fs.Bool("json", false, "")
@@ -677,6 +770,10 @@ func cmdEvidence(args []string, out io.Writer) error {
 		}
 		what := e.Note
 		switch {
+		case e.Kind == task.KindAttestation:
+			what = e.Role + ": " + e.Statement
+		case e.Kind == task.KindEval:
+			what = strings.TrimSpace(metricSummary(e) + " " + e.Note)
 		case e.Command != "":
 			what = fmt.Sprintf("%s (exit %d)", e.Command, e.ExitCode)
 		case e.Kind == "run" && (e.Model != "" || e.Cost != 0):
@@ -717,7 +814,7 @@ func pauseReason(p *spec.Project) string {
 
 func cmdProject(args []string, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New(T("usage: trilha-spec project show | pause [--reason R] | resume | limit <key> <value|->"))
+		return errors.New(T("usage: trilha-spec project show | pause [--reason R] | resume | limit <key> <value|-> | milestone <id> [flags]"))
 	}
 	st, err := store()
 	if err != nil {
@@ -758,6 +855,39 @@ func cmdProject(args []string, out io.Writer) error {
 			return err
 		}
 		fmt.Fprintf(out, T("%s resumed\n"), p.Name)
+		return nil
+	case "milestone":
+		fs := flags("project milestone")
+		title := fs.String("title", "", "one line naming what it delivers")
+		due := fs.String("due", "", "the day it is due, YYYY-MM-DD")
+		gate := fs.String("gate", "", "what has to be true for it to be met")
+		pos, err := parse(fs, args[1:])
+		if err != nil {
+			return err
+		}
+		if len(pos) == 2 && pos[1] == "-" {
+			if !p.DeleteMilestone(pos[0]) {
+				return fmt.Errorf(T("milestone %s is not declared"), pos[0])
+			}
+		} else if len(pos) == 1 {
+			m, _ := p.Milestone(pos[0])
+			m.ID = pos[0]
+			for _, kv := range []struct {
+				into *string
+				from string
+			}{{&m.Title, *title}, {&m.Due, *due}, {&m.Gate, *gate}} {
+				if kv.from != "" {
+					*kv.into = kv.from
+				}
+			}
+			p.SetMilestone(m)
+		} else {
+			return errors.New(T("usage: trilha-spec project milestone <id> [--title T] [--due YYYY-MM-DD] [--gate G] | <id> -"))
+		}
+		if err := l.SaveProject(p); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, T("updated %s\n"), rel(l, l.Project()))
 		return nil
 	case "limit":
 		if len(args) != 3 {
@@ -902,6 +1032,51 @@ func cmdKeygen(args []string, out io.Writer) error {
 	return nil
 }
 
+// recorded prints what `evidence add` wrote, saying who signed it when
+// somebody did.
+func recorded(out io.Writer, l spec.Layout, e task.Evidence, path string, signer *task.Signer) error {
+	if signer != nil {
+		fmt.Fprintf(out, T("recorded #%d (%s), signed by %s\n"), e.Seq, rel(l, path), signer.KeyID)
+		return nil
+	}
+	fmt.Fprintf(out, T("recorded #%d (%s)\n"), e.Seq, rel(l, path))
+	return nil
+}
+
+// evalMetric turns the `evidence add --eval` flags into a measurement. An
+// absent --threshold is a measurement, not a gate; an absent --value is an
+// error, because an eval without a number is a note.
+func evalMetric(metric, value, unit, threshold, comparator, datasetID, datasetSHA string) (task.Metric, error) {
+	if value == "" {
+		return task.Metric{}, errors.New(T("evidence add --eval needs --metric and --value"))
+	}
+	v, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return task.Metric{}, fmt.Errorf(T("--value %q is not a number"), value)
+	}
+	m := task.Metric{Metric: metric, Value: v, Unit: unit}
+	if threshold != "" {
+		th, err := strconv.ParseFloat(threshold, 64)
+		if err != nil {
+			return task.Metric{}, fmt.Errorf(T("--threshold %q is not a number"), threshold)
+		}
+		m.Threshold = &th
+		m.Comparator = comparator
+	}
+	if datasetID != "" {
+		m.Dataset = &task.Dataset{ID: datasetID, SHA256: datasetSHA}
+	}
+	return m, nil
+}
+
+// metricSummary is an eval in one glance: `triage_top1 0.87 >= 0.85 on golden-2026`.
+func metricSummary(e task.Evidence) string {
+	for _, m := range task.Metrics([]task.Evidence{e}) {
+		return m.String()
+	}
+	return e.Metric
+}
+
 // runSummary is a run's cost in one glance: `anthropic/claude-sonnet-5 12345+678 tokens 0.0421 USD`.
 func runSummary(e task.Evidence) string {
 	var parts []string
@@ -918,27 +1093,71 @@ func runSummary(e task.Evidence) string {
 }
 
 func cmdDoctor(args []string, out io.Writer) error {
+	fs := flags("doctor")
+	repos := repoFlag(fs)
+	if _, err := parse(fs, args); err != nil {
+		return err
+	}
 	st, err := store()
 	if err != nil {
 		return err
 	}
-	var problems, warns []string
-	for _, p := range st.Layout.Doctor() {
-		problems = append(problems, doctorMessage(p))
+	if st.Remote, err = checkouts(st.Layout, *repos); err != nil {
+		return err
 	}
-	if _, err := st.List(); err != nil {
-		problems = append(problems, err.Error())
+	var problems, warns []string
+	add := func(p spec.Problem) {
+		if p.Warning() {
+			warns = append(warns, doctorMessage(p))
+		} else {
+			problems = append(problems, doctorMessage(p))
+		}
+	}
+	for _, p := range st.Layout.Doctor() {
+		add(p)
+	}
+	tasks, tasksErr := st.List()
+	if tasksErr != nil {
+		problems = append(problems, tasksErr.Error())
 	} else if _, err := st.Graph(); err != nil {
 		problems = append(problems, err.Error())
 	}
-	if specs, err := st.Layout.ListSpecs(); err != nil {
-		problems = append(problems, err.Error())
+	specs, specsErr := st.Layout.ListSpecs()
+	if specsErr != nil {
+		problems = append(problems, specsErr.Error())
 	} else {
 		for _, p := range st.Layout.CheckSpecs(specs) {
-			if p.Warning() {
-				warns = append(warns, doctorMessage(p))
-			} else {
-				problems = append(problems, doctorMessage(p))
+			add(p)
+		}
+	}
+	// Traceability needs both sides: the requirements a spec declares and
+	// the tasks that claim to cover them.
+	if tasksErr == nil && specsErr == nil {
+		for _, p := range task.CheckRequirements(specs, tasks) {
+			add(p)
+		}
+		if metrics, err := task.CheckMetrics(st.Layout, tasks); err != nil {
+			problems = append(problems, err.Error())
+		} else {
+			for _, p := range metrics {
+				add(p)
+			}
+		}
+		if attests, err := task.CheckAttestations(st.Layout, tasks); err != nil {
+			problems = append(problems, err.Error())
+		} else {
+			for _, p := range attests {
+				add(p)
+			}
+		}
+		if proj, err := st.Layout.LoadProject(); err != nil {
+			problems = append(problems, err.Error())
+		} else {
+			for _, p := range task.CheckMilestones(proj, specs, tasks, task.Today()) {
+				add(p)
+			}
+			for _, p := range task.CheckRepos(proj, tasks) {
+				add(p)
 			}
 		}
 	}
@@ -967,6 +1186,37 @@ func rel(l spec.Layout, p string) string {
 		return r
 	}
 	return p
+}
+
+// specIndex answers every specification by ID, for the fields a task
+// inherits from the spec it implements.
+func specIndex(l spec.Layout) (map[string]*spec.Spec, error) {
+	specs, err := l.ListSpecs()
+	if err != nil {
+		return nil, err
+	}
+	return task.SpecsByID(specs), nil
+}
+
+// printCoverage renders the requirement matrix: one line per requirement,
+// the tasks that cover it with their status and how much evidence each has.
+// An uncovered requirement shows a dash, which is the line a buyer looks for.
+func printCoverage(out io.Writer, rows []task.Coverage, asJSON bool) error {
+	if asJSON {
+		return printJSON(out, rows)
+	}
+	fmt.Fprintf(out, "%-16s %-40s %s\n", T("REQUIREMENT"), T("TEXT"), T("TASKS"))
+	for _, r := range rows {
+		var covers []string
+		for _, t := range r.Tasks {
+			covers = append(covers, fmt.Sprintf("%s (%s, %d ev)", t.ID, t.Status, t.Evidence))
+		}
+		if len(covers) == 0 {
+			covers = []string{"—"}
+		}
+		fmt.Fprintf(out, "%-16s %-40s %s\n", r.Requirement.ID, trunc(r.Requirement.Text, 40), strings.Join(covers, ", "))
+	}
+	return nil
 }
 
 // splitList cuts a comma-separated flag into its items, blanks dropped.

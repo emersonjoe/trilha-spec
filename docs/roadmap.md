@@ -10,7 +10,22 @@ transition changes (§9 of the protocol).
 ## Open
 
 Nothing at the moment: `trilha-spec task list --status idea` is empty. The next gaps will
-come from the runner and the control plane using protocol 0.2.
+come from the runner, the control plane and the programmes using protocol 0.3.
+
+## Delivered in 0.3
+
+These came from planning a public-sector delivery programme that spans four repositories — the
+product app, the framework, the runner and the control plane — and has to be auditable by the
+buyer at every milestone. Each one is a spec under `specs/` and
+a `done` task with evidence.
+
+| Task | Gap | Why it mattered |
+|---|---|---|
+| TASK-016 · spec 009 · [#10](https://github.com/emersonjoe/trilha-spec/issues/10) | When the source of scope is an **external document** — a tender's requirement list, a law, a KPI in a contract — nothing links tasks to it. | "Which requirements are covered, by which task, with what evidence" was a spreadsheet kept by hand, and it is the question a public buyer asks at every milestone. |
+| TASK-018 · spec 010 · [#12](https://github.com/emersonjoe/trilha-spec/issues/12) | The protocol had statuses and dependencies but **no calendar**: no way to say "this task belongs to M2, due 2027-04-30". | A contract with paid milestones reported its physical-financial schedule outside the protocol. |
+| TASK-014 · spec 011 · [#8](https://github.com/emersonjoe/trilha-spec/issues/8) | Quality is measured with **numbers**, and the only way to record one was a `check` whose exit code hid it. | The reviewer could not see the value, nothing could trend it, and a control plane could not gate on it. |
+| TASK-015 · spec 012 · [#9](https://github.com/emersonjoe/trilha-spec/issues/9) | `review → done` was one person's decision, and nothing distinguished "someone typed a note" from "this person, in this role, **attests** this — signed". | Public-sector delivery ends with named human acceptance, sometimes by a committee. |
+| TASK-017 · spec 013 · [#11](https://github.com/emersonjoe/trilha-spec/issues/11) | `depends_on` was local only, so a programme spanning repositories wrote its real dependencies as **prose**. | `next` offered work that could not start, and nobody could draw the graph. |
 
 ## Delivered in 0.2
 

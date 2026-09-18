@@ -13,7 +13,13 @@ import (
 // Store reads and writes tasks in a layout. There is no cache: the files are
 // the truth, and another process — an agent, a person with an editor — may
 // have changed them since the last call.
-type Store struct{ Layout spec.Layout }
+type Store struct {
+	Layout spec.Layout
+	// Remote answers for dependencies in other repositories; nil means
+	// nobody answers, and a task waiting on one stays blocked with a reason
+	// that names it. A local-only project never sets it.
+	Remote Resolver
+}
 
 // Open finds the layout above dir and answers a store on it.
 func Open(dir string) (*Store, error) {
@@ -129,6 +135,18 @@ func (s *Store) Move(id string, to Status) (*Task, error) {
 			return nil, fmt.Errorf("task %s: cannot run, waiting on %s", id, strings.Join(open, ", "))
 		}
 	}
+	// A task with a review policy does not close on one person's say-so: the
+	// signed attestations have to be there, and the refusal says what is
+	// missing rather than just saying no.
+	if to == Done {
+		q, err := QuorumOf(s.Layout, t)
+		if err != nil {
+			return nil, err
+		}
+		if !q.Met() {
+			return nil, fmt.Errorf("task %s: cannot close, %s", id, q.Reason())
+		}
+	}
 	if err := t.Move(to); err != nil {
 		return nil, err
 	}
@@ -141,5 +159,5 @@ func (s *Store) Graph() (*Graph, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewGraph(tasks)
+	return NewGraphWith(tasks, s.Remote)
 }
