@@ -159,7 +159,7 @@ func Tools(l spec.Layout, write bool) []*Tool {
 		},
 		{
 			Name:        "trilha_graph",
-			Description: "The dependency graph as Mermaid.",
+			Description: "The dependency graph as Mermaid. A dependency in another repository is drawn as `alias:TASK-NNN`.",
 			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 				g, err := st.Graph()
 				if err != nil {

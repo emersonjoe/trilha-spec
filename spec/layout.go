@@ -213,6 +213,8 @@ func (p Problem) String() string {
 		return "task " + p.Arg + " asks for a review quorum but names no roles"
 	case ProblemAttestationUnknownKey:
 		return "attestation signed with a key the project does not hold: " + p.Arg
+	case ProblemRepoUnknown:
+		return "dependency on a repository project.md does not declare in `repos`: " + p.Arg
 	}
 	return p.Code + " " + p.Arg
 }

@@ -74,6 +74,8 @@ func doctorMessage(p spec.Problem) string {
 		return fmt.Sprintf(T("task %s asks for a review quorum but names no roles"), p.Arg)
 	case spec.ProblemAttestationUnknownKey:
 		return fmt.Sprintf(T("attestation signed with a key the project does not hold: %s"), p.Arg)
+	case spec.ProblemRepoUnknown:
+		return fmt.Sprintf(T("dependency on a repository project.md does not declare in `repos`: %s"), p.Arg)
 	}
 	return p.String()
 }
@@ -88,7 +90,8 @@ uso: trilha-spec <comando> [flags]
   spec set <id> [--issue N] [--supersedes A,B] [--depends A,B] [--asset A]... [--boundary B]... [--control C]... [--evidence CMD]...
   task add <título> [--spec ID] [--depends A,B] [--agent N] [--status S] [--covers R,S] [--milestone M] [--accept C]... [--check CMD]...
            [--body TEXTO | --body-file CAMINHO]   (CAMINHO "-" lê stdin)
-  task list [--status S] [--milestone M] | show <id> | next | move <id> <status> | graph [--dot]
+  task list [--status S] [--milestone M] | show <id> | next | move <id> <status> | graph [--dot] [--program]
+           list, next, graph e doctor aceitam --repo alias=caminho (repetível) para um checkout irmão
   agent list | show <nome>
   project show | pause [--reason R] | resume | limit <chave> <valor|->
   project milestone <id> [--title T] [--due AAAA-MM-DD] [--gate G] | <id> -

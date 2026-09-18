@@ -652,3 +652,68 @@ func TestAttestationQuorumCLI(t *testing.T) {
 		t.Fatalf("doctor:\n%s", out)
 	}
 }
+
+// TestCrossRepositoryCLI walks a program that spans two repositories: the
+// product waits on the framework, `next` refuses to offer work that cannot
+// start, and `--repo` is what lets it answer.
+func TestCrossRepositoryCLI(t *testing.T) {
+	root := t.TempDir()
+	here := filepath.Join(root, "app")
+	there := filepath.Join(root, "trilha")
+	for _, d := range []string{here, there} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		must(t, d, "init", "--name", filepath.Base(d))
+	}
+	must(t, there, "task", "add", "Framework work", "--status", "ready", "--accept", "ok")
+	// The alias is declared in project.md; the URL says which repository it is.
+	p := filepath.Join(here, ".trilha", "project.md")
+	b, _ := os.ReadFile(p)
+	os.WriteFile(p, []byte(strings.Replace(string(b), "verify: []\n", "verify: []\nrepos:\n  trilha: https://github.com/emersonjoe/trilha\n", 1)), 0o644)
+	must(t, here, "task", "add", "Product work", "--status", "ready", "--accept", "ok", "--depends", "trilha:TASK-001")
+
+	// Nobody to ask: the work waits, and the reason names the repository.
+	if out := must(t, here, "task", "list"); !strings.Contains(out, "waiting:trilha:TASK-001") {
+		t.Fatalf("list:\n%s", out)
+	}
+	if out := must(t, here, "task", "next"); !strings.Contains(out, "nothing ready") {
+		t.Fatalf("next offered unresolved work:\n%s", out)
+	}
+	if out, err := cli(t, here, "task", "move", "TASK-001", "running"); err == nil || !strings.Contains(out, "waiting:trilha:TASK-001") {
+		t.Fatalf("started unresolved work:\n%s", out)
+	}
+	// A sibling checkout answers: the dependency is real, and not done yet.
+	if out := must(t, here, "task", "list", "--repo", "trilha="+there); !strings.Contains(out, "trilha:TASK-001") || strings.Contains(out, "waiting:") {
+		t.Fatalf("list --repo:\n%s", out)
+	}
+	if out, err := cli(t, here, "task", "list", "--repo", "trilha"); err == nil || !strings.Contains(out, "is not alias=path") {
+		t.Fatalf("bad --repo accepted:\n%s", out)
+	}
+	for _, to := range []string{"running", "verify", "review", "done"} {
+		must(t, there, "task", "move", "TASK-001", to)
+	}
+	if out := must(t, here, "task", "next", "--repo", "trilha="+there); !strings.HasPrefix(out, "TASK-001  Product work") {
+		t.Fatalf("next after the other repository closed it:\n%s", out)
+	}
+	if out := must(t, here, "task", "graph"); !strings.Contains(out, `trilha_TASK_001["trilha:TASK-001"] --> TASK_001`) {
+		t.Fatalf("graph:\n%s", out)
+	}
+	// A program manifest above the checkouts resolves the aliases by itself.
+	os.WriteFile(filepath.Join(root, "program.md"),
+		[]byte("---\nname: Platform programme\nrepos:\n  app: app\n  trilha: trilha\nmilestones:\n  - id: M2\n    due: 2027-04-30\n---\n"), 0o644)
+	if out := must(t, here, "task", "next"); !strings.HasPrefix(out, "TASK-001  Product work") {
+		t.Fatalf("the manifest should resolve the alias:\n%s", out)
+	}
+	out := must(t, here, "task", "graph", "--program")
+	for _, want := range []string{"subgraph app", "subgraph trilha", "trilha_TASK_001 --> app_TASK_001"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("program graph missing %q:\n%s", want, out)
+		}
+	}
+	// An alias project.md does not declare is a fault.
+	must(t, here, "task", "add", "Fora", "--depends", "cloud:TASK-001")
+	if out, err := cli(t, here, "doctor"); err == nil || !strings.Contains(out, "does not declare in `repos`: TASK-002 cloud:TASK-001") {
+		t.Fatalf("doctor:\n%s", out)
+	}
+}

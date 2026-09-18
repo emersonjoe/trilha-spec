@@ -83,6 +83,8 @@ type Task struct {
 	Milestone string `json:"milestone,omitempty"`
 	// Agent is who executes it: an agent name from .trilha/agents/.
 	Agent string `json:"agent,omitempty"`
+	// DependsOn names the tasks this one waits on: `TASK-NNN` here, or
+	// `<alias>:TASK-NNN` in a repository `project.md` declares in `repos`.
 	// Covers names the external requirements (§11) this task delivers.
 	Covers    []string `json:"covers,omitempty"`
 	DependsOn []string `json:"depends_on,omitempty"`
@@ -170,8 +172,8 @@ func (t *Task) Validate() error {
 		errs = append(errs, fmt.Sprintf("status %q is not one of %v", t.Status, Statuses))
 	}
 	for _, d := range t.DependsOn {
-		if !ValidID(d) {
-			errs = append(errs, fmt.Sprintf("depends_on %q is not a task id", d))
+		if _, ok := ParseRef(d); !ok {
+			errs = append(errs, fmt.Sprintf("depends_on %q is neither a task id nor <alias>:TASK-NNN", d))
 		}
 		if d == t.ID {
 			errs = append(errs, "a task cannot depend on itself")

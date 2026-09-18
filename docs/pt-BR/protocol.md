@@ -67,7 +67,7 @@ estável: campos do protocolo primeiro, na ordem abaixo, depois os desconhecidos
 | `spec` | não | o ID da especificação que implementa |
 | `milestone` | não | o marco (§12) a que pertence; vazio vale o da sua spec |
 | `agent` | não | nome de agente; senão `project.default_agent` |
-| `depends_on` | não | IDs de task; todos precisam existir; sem ciclo |
+| `depends_on` | não | IDs de task, ou `<alias>:TASK-NNN` para outro repositório (§13); o local precisa existir; sem ciclo |
 | `covers` | não | IDs de requisito que a task entrega (§11); todos precisam ser declarados por uma spec |
 | `acceptance` | de `ready` em diante | o que precisa ser verdade para fechar, em palavras; um item pode ser um portão métrico, `metric: <nome> <comparador> <número>` (§5) |
 | `checks` | não | comandos que o `verify` roda; programa + argumentos, sem shell |
@@ -361,6 +361,7 @@ ferramentas consomem.
 | `description` | não | uma linha |
 | `default_agent` | não | o agente que uma task sem `agent` recebe |
 | `verify` | não | comandos que toda task roda além dos próprios checks |
+| `repos` | não | outros repositórios de que este depende, alias → URL; ver §13 |
 | `milestones` | não | os marcos datados do programa, um bloco cada: `id`, `title`, `due`, `gate` |
 | `limits` | não | um mapa de limiares numéricos, abaixo |
 | `paused` | não | `true` para a fila: `next` não responde nada e diz por quê |
@@ -402,3 +403,49 @@ O protocolo *carrega* limites, marcos e pausa; fazê-los valer — recusar inici
 tentativa em curso, disparar o disjuntor — é trabalho do runner e do control plane, como com os
 manifestos de agente (§7). O pacote de contexto (§6) inclui `limits` e a pausa, para o agente
 conhecer seu envelope. Todo leitor pode ignorar todos esses campos.
+
+## 13. Programas entre repositórios
+
+Um programa atravessa repositórios — o produto, o framework em que ele roda, o control plane,
+um gateway — e o trabalho de um depende do outro. O `project.md` nomeia os que este repositório
+aponta:
+
+```
+repos:
+  trilha: https://github.com/emersonjoe/trilha
+```
+
+Uma task passa a depender de uma task de lá, `depends_on: [trilha:TASK-004]`. Um alias são
+palavras minúsculas unidas por `-` ou `.`; a URL diz que repositório é aquele, e o `doctor`
+aponta dependência de um alias que `repos` não declara.
+
+Resolver isso é papel de alguém, não do formato. Um leitor responde uma dependência remota a
+partir de um **checkout irmão** (`--repo alias=caminho`, repetível) ou de um control plane que
+responda por ela — a implementação de referência declara isso como interface e não abre socket
+nenhum. Enquanto ninguém responde, a dependência bloqueia a task com o motivo
+`waiting:<alias>:TASK-NNN`: o `next` não a oferece, o `running` a recusa e o `graph` a desenha.
+Uma dependência remota nunca entra na ordem topológica deste repositório, porque não é trabalho
+dele.
+
+Um `program.md` opcional, em um diretório acima dos checkouts, nomeia os repositórios e os
+marcos que eles compartilham:
+
+```
+---
+name: Platform programme
+repos:
+  app: app
+  trilha: trilha
+milestones:
+  - id: M2
+    due: 2027-04-30
+---
+```
+
+Os `repos` dele são caminhos, relativos ao arquivo ou absolutos, então um leitor que acha o
+manifesto resolve os aliases sem que ninguém lhe diga onde nada está; `--repo` continua
+prevalecendo. Ele é encontrado subindo a partir do pai do projeto, não faz parte de `.trilha/`,
+e seus marcos têm a forma da §12. `graph --program` desenha um subgrafo por repositório, com as
+dependências que cruzam entre eles; um repositório que ninguém baixou ainda aparece, como
+aquilo que o trabalho está esperando. Um projeto sem manifesto e sem `repos` nunca percebe nada
+disso.

@@ -39,7 +39,8 @@ usage: trilha-spec <command> [flags]
   spec set <id> [--issue N] [--supersedes A,B] [--depends A,B] [--asset A]... [--boundary B]... [--control C]... [--evidence CMD]...
   task add <title> [--spec ID] [--depends A,B] [--agent N] [--status S] [--covers R,S] [--milestone M] [--accept C]... [--check CMD]...
            [--body TEXT | --body-file PATH]   (PATH "-" reads stdin)
-  task list [--status S] [--milestone M] | show <id> | next | move <id> <status> | graph [--dot]
+  task list [--status S] [--milestone M] | show <id> | next | move <id> <status> | graph [--dot] [--program]
+           list, next, graph and doctor take --repo alias=path (repeatable) for a sibling checkout
   agent list | show <name>
   project show | pause [--reason R] | resume | limit <key> <value|->
   project milestone <id> [--title T] [--due YYYY-MM-DD] [--gate G] | <id> -
@@ -373,7 +374,11 @@ func cmdTask(args []string, out io.Writer) error {
 		asJSON := fs.Bool("json", false, "")
 		status := fs.String("status", "", "filter by status")
 		milestone := fs.String("milestone", "", "filter by milestone, the task's own or its spec's")
+		repos := repoFlag(fs)
 		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if st.Remote, err = checkouts(st.Layout, *repos); err != nil {
 			return err
 		}
 		tasks, err := st.List()
@@ -428,7 +433,11 @@ func cmdTask(args []string, out io.Writer) error {
 	case "next":
 		fs := flags("task next")
 		asJSON := fs.Bool("json", false, "")
+		repos := repoFlag(fs)
 		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if st.Remote, err = checkouts(st.Layout, *repos); err != nil {
 			return err
 		}
 		g, err := st.Graph()
@@ -483,9 +492,28 @@ func cmdTask(args []string, out io.Writer) error {
 	case "graph":
 		fs := flags("task graph")
 		dot := fs.Bool("dot", false, "Graphviz instead of Mermaid")
+		program := fs.Bool("program", false, "every repository of the program manifest, one subgraph each")
+		repos := repoFlag(fs)
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
+		resolved, err := checkouts(st.Layout, *repos)
+		if err != nil {
+			return err
+		}
+		if *program {
+			prog, err := st.Layout.FindProgram()
+			if err != nil {
+				return err
+			}
+			g, err := task.ProgramGraph(st.Layout, prog, resolved)
+			if err != nil {
+				return err
+			}
+			fmt.Fprint(out, g)
+			return nil
+		}
+		st.Remote = resolved
 		g, err := st.Graph()
 		if err != nil {
 			return err
@@ -1065,8 +1093,16 @@ func runSummary(e task.Evidence) string {
 }
 
 func cmdDoctor(args []string, out io.Writer) error {
+	fs := flags("doctor")
+	repos := repoFlag(fs)
+	if _, err := parse(fs, args); err != nil {
+		return err
+	}
 	st, err := store()
 	if err != nil {
+		return err
+	}
+	if st.Remote, err = checkouts(st.Layout, *repos); err != nil {
 		return err
 	}
 	var problems, warns []string
@@ -1118,6 +1154,9 @@ func cmdDoctor(args []string, out io.Writer) error {
 			problems = append(problems, err.Error())
 		} else {
 			for _, p := range task.CheckMilestones(proj, specs, tasks, task.Today()) {
+				add(p)
+			}
+			for _, p := range task.CheckRepos(proj, tasks) {
 				add(p)
 			}
 		}

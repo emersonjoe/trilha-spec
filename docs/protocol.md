@@ -67,7 +67,7 @@ fields first, in the order below, then unknown fields in the order read.
 | `spec` | no | the specification ID it implements |
 | `milestone` | no | the milestone (§12) it belongs to; empty means its spec's |
 | `agent` | no | an agent name; `project.default_agent` otherwise |
-| `depends_on` | no | task IDs; every one must exist; no cycles |
+| `depends_on` | no | task IDs, or `<alias>:TASK-NNN` for another repository (§13); a local one must exist; no cycles |
 | `covers` | no | requirement IDs the task delivers (§11); every one must be declared by a spec |
 | `acceptance` | for `ready` on | what must be true to close, in words; an item may be a metric gate, `metric: <name> <comparator> <number>` (§5) |
 | `checks` | no | commands `verify` runs; program + arguments, no shell |
@@ -358,6 +358,7 @@ tools consume.
 | `description` | no | one line |
 | `default_agent` | no | the agent a task without `agent` gets |
 | `verify` | no | commands every task runs on top of its own checks |
+| `repos` | no | other repositories this one depends on, alias → URL; see §13 |
 | `milestones` | no | the dated points of the programme, one block each: `id`, `title`, `due`, `gate` |
 | `limits` | no | a map of numeric thresholds, below |
 | `paused` | no | `true` stops the queue: `next` answers nothing and says why |
@@ -399,3 +400,48 @@ The protocol *carries* limits, milestones and pause; enforcing them — refusing
 running attempt, tripping the breaker — is the runner's and the control plane's job, as with
 agent manifests (§7). The context pack (§6) includes `limits` and the pause, so an agent knows
 its envelope. Every reader may ignore all of these fields.
+
+## 13. Programs across repositories
+
+A programme spans repositories — the product, the framework it runs on, the control plane, a
+gateway — and their work depends on each other. `project.md` names the ones this repository
+points at:
+
+```
+repos:
+  trilha: https://github.com/emersonjoe/trilha
+```
+
+A task then depends on a task over there, `depends_on: [trilha:TASK-004]`. An alias is
+lowercase words joined by `-` or `.`; the URL says which repository it is, and `doctor` reports
+a dependency on an alias `repos` does not declare.
+
+Resolving it is somebody's job, not the format's. A reader answers a remote dependency from a
+**sibling checkout** (`--repo alias=path`, repeatable) or from a control plane that answers for
+it — the reference implementation states that as an interface and opens no socket. While
+nobody answers, the dependency blocks the task with the reason `waiting:<alias>:TASK-NNN`:
+`next` does not offer it, `running` refuses it and `graph` draws it. A remote dependency never
+joins this repository's topological order, because it is not this repository's work.
+
+An optional `program.md`, in a directory above the checkouts, names the repositories and the
+milestones they share:
+
+```
+---
+name: Platform programme
+repos:
+  app: app
+  trilha: trilha
+milestones:
+  - id: M2
+    due: 2027-04-30
+---
+```
+
+Its `repos` are paths, relative to the file or absolute, so a reader that finds the manifest
+resolves the aliases without being told where anything is; `--repo` still wins over it. It is
+found by walking up from the project's parent, it is not part of `.trilha/`, and its
+milestones are the shape of §12. `graph --program` draws one subgraph per repository, with the
+dependencies that cross between them; a repository nobody checked out still appears, as the
+thing the work is waiting for. A project with no manifest and no `repos` never notices any of
+this.
