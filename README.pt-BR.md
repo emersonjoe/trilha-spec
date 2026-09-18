@@ -26,6 +26,10 @@ governança são o trilha-cloud.
 └── runs/             rascunho do runner; nunca commitado
 ```
 
+Um programa que atravessa repositórios pode pôr um `program.md` opcional acima dos checkouts,
+nomeando-os e aos marcos que eles compartilham; um projeto de um repositório só nunca precisa
+de um.
+
 Tudo é Markdown com um front matter pequeno — legível por uma pessoa, por um diff e por um
 modelo — e o módulo depende só da biblioteca padrão do Go, para que qualquer ferramenta leia.
 
@@ -37,14 +41,21 @@ id: TASK-002
 title: Implementar login OAuth
 status: ready
 spec: 001-oauth
+milestone: M2
 agent: coder
+covers:
+  - D2-R8
 depends_on:
   - TASK-001
+  - "trilha:TASK-004"
 acceptance:
   - Login OAuth funciona com o provedor descrito em context/
-  - Testes passam
+  - "metric: login_p95 <= 2"
 checks:
   - go test ./...
+review:
+  quorum: 2
+  roles: [uat, legal]
 ---
 ```
 
@@ -56,9 +67,11 @@ idea → spec → ready → running → verify → review → done
                  └── blocked / failed ←──────┘
 ```
 
-`ready` exige critérios de aceite; `running` exige toda dependência `done`; `verify` roda os
-checks e grava cada um como **evidência** — código de saída, hash da saída, quem rodou,
-quando — e o revisor decide pela evidência, não pelo log do chat.
+`ready` exige critérios de aceite; `running` exige toda dependência `done` — inclusive uma em
+outro repositório, `trilha:TASK-004`; `verify` roda os checks e grava cada um como
+**evidência** — código de saída, hash da saída, quem rodou, quando, e os números que um harness
+imprimiu — e o revisor decide pela evidência, não pelo log do chat. Uma task que declara quórum
+de `review` não fecha até que essa quantidade de pessoas nomeadas assine o que atesta.
 
 ## A CLI
 
@@ -87,7 +100,16 @@ trilha-spec evidence TASK-001 add --run --by runner-01 --model claude-sonnet-5 \
 trilha-spec evidence TASK-001 --verify         # unsigned | valid | invalid, por registro
 trilha-spec evidence TASK-001 add --run --provider anthropic --model claude-sonnet-5 \
     --tokens-in 12345 --tokens-out 678 --cost 0.0421 --currency USD   # o que um runner declara
-trilha-spec task graph                         # Mermaid; --dot para Graphviz
+trilha-spec evidence TASK-001 add --eval --metric triage_top1 --value 0.87 \
+    --threshold 0.85 --comparator '>=' --dataset golden-2026   # um número, não um código de saída
+trilha-spec evidence TASK-001 add --attestation --by "Ana Souza" --role uat \
+    --statement "Homologado com a equipe da prefeitura." \
+    --sign-key ~/.trilha/keys/ana.key          # `review: {quorum, roles}` na task barra o `done`
+trilha-spec project milestone M2 --title "PoC" --due 2027-04-30 --gate "aceite do cliente"
+trilha-spec task list --milestone M2           # o next prefere o prazo mais próximo
+trilha-spec spec show 001-login-oauth --coverage   # requisito → tasks → status → evidência
+trilha-spec task next --repo trilha=../trilha  # responde `depends_on: [trilha:TASK-004]`
+trilha-spec task graph                         # Mermaid; --dot para Graphviz, --program para o programa inteiro
 trilha-spec mcp --write                        # o mesmo por MCP, para Claude Code / Cursor
 ```
 
@@ -100,8 +122,8 @@ mudam, porque nomes de status, de campo e IDs são o protocolo.
 
 `trilha-spec mcp` serve o protocolo por stdio a qualquer host MCP. Só leitura por padrão
 (`trilha_list_tasks`, `trilha_get_task`, `trilha_next`, `trilha_context`, `trilha_list_specs`,
-`trilha_list_evidence`, `trilha_graph`); `--write` acrescenta `trilha_move`, `trilha_spec_move`, `trilha_evidence` e
-`trilha_verify`. Ferramenta não
+`trilha_list_evidence`, `trilha_coverage`, `trilha_graph`); `--write` acrescenta `trilha_move`,
+`trilha_spec_move`, `trilha_evidence`, `trilha_attest` e `trilha_verify`. Ferramenta não
 oferecida não pode ser chamada.
 
 ## Pacotes

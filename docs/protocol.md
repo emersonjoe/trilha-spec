@@ -1,4 +1,4 @@
-# The Trilha protocol, version 0.2
+# The Trilha protocol, version 0.3
 
 > 🇺🇸 English · [🇧🇷 Português](pt-BR/protocol.md)
 
@@ -271,11 +271,21 @@ Write tools are only listed with `--write`; a tool not listed cannot be called.
 
 ## 9. Versioning
 
-This page is version 0.2. A change to a field, a transition or a file name bumps it and is
-recorded in a spec under `specs/`. 0.2 (specs 003–008) added spec `rejected`/`superseded` and
+This page is version 0.3. A change to a field, a transition or a file name bumps it and is
+recorded in a spec under `specs/`.
+
+0.3 (specs 009–013) came from planning a public-sector programme across four repositories. It
+added requirement traceability (`requirements` on a spec, `covers` on a task), milestones with
+due dates, the `eval` evidence kind for metrics with thresholds, the `attestation` kind with a
+review quorum on a task, and cross-repository dependencies with an optional `program.md`. The
+front matter grammar (§2) grew two shapes for them: a block may hold lists, and a list may hold
+blocks. Every addition is a new optional field, so a 0.2 reader still reads a 0.3 directory —
+with one new rule a *writer* must know: `review → done` is refused while a declared quorum is
+unmet (§4).
+
+0.2 (specs 003–008) added spec `rejected`/`superseded` and
 relations, security impact on a spec, project limits and pause, cost fields on `run`
-evidence, and signed evidence; every addition is a new optional field, so a 0.1 reader still
-reads a 0.2 directory. Readers should tolerate unknown fields and unknown evidence
+evidence, and signed evidence. Readers should tolerate unknown fields and unknown evidence
 kinds.
 
 ## 10. Execution contract

@@ -26,6 +26,9 @@ governance are trilha-cloud.
 └── runs/             runner scratch; never committed
 ```
 
+A programme that spans repositories may put an optional `program.md` above the checkouts,
+naming them and the milestones they share; a single-repository project never needs one.
+
 Everything is Markdown with a small front matter — readable by a person, a diff and a model —
 and the module depends only on the Go standard library, so any tool can read it.
 
@@ -37,15 +40,22 @@ id: TASK-002
 title: Implement OAuth login
 status: ready
 spec: 001-oauth
+milestone: M2
 agent: coder
+covers:
+  - D2-R8
 depends_on:
   - TASK-001
+  - "trilha:TASK-004"
 acceptance:
   - OAuth login works against the provider in context/
-  - Tests pass
+  - "metric: login_p95 <= 2"
 checks:
   - go test ./...
   - sh -c "curl -sf localhost:3000/login | grep -q 'Sign in'"
+review:
+  quorum: 2
+  roles: [uat, legal]
 ---
 
 Use the provider described in `context/oauth.md`. Do not add a dependency.
@@ -59,9 +69,11 @@ idea → spec → ready → running → verify → review → done
                  └── blocked / failed ←──────┘
 ```
 
-`ready` needs acceptance criteria; `running` needs every dependency `done`; `verify` runs the
-checks and records each as **evidence** — exit code, output hash, who ran it, when — and the
-reviewer decides from the evidence, not from a chat log.
+`ready` needs acceptance criteria; `running` needs every dependency `done` — including one in
+another repository, `trilha:TASK-004`; `verify` runs the checks and records each as
+**evidence** — exit code, output hash, who ran it, when, and the numbers a harness printed —
+and the reviewer decides from the evidence, not from a chat log. A task that declares a
+`review` quorum does not close until that many named people have signed what they attest.
 
 ## The CLI
 
@@ -91,7 +103,16 @@ trilha-spec evidence TASK-001 add --run --by runner-01 --model claude-sonnet-5 \
 trilha-spec evidence TASK-001 --verify         # unsigned | valid | invalid, per record
 trilha-spec evidence TASK-001 add --run --provider anthropic --model claude-sonnet-5 \
     --tokens-in 12345 --tokens-out 678 --cost 0.0421 --currency USD   # what a runner declares
-trilha-spec task graph                         # Mermaid; --dot for Graphviz
+trilha-spec evidence TASK-001 add --eval --metric triage_top1 --value 0.87 \
+    --threshold 0.85 --comparator '>=' --dataset golden-2026   # a number, not an exit code
+trilha-spec evidence TASK-001 add --attestation --by "Ana Souza" --role uat \
+    --statement "Homologado com a equipe da prefeitura." \
+    --sign-key ~/.trilha/keys/ana.key          # `review: {quorum, roles}` on the task gates `done`
+trilha-spec project milestone M2 --title "PoC" --due 2027-04-30 --gate "client sign-off"
+trilha-spec task list --milestone M2           # next prefers the nearest deadline
+trilha-spec spec show 001-oauth-login --coverage   # requirement → tasks → status → evidence
+trilha-spec task next --repo trilha=../trilha  # answers `depends_on: [trilha:TASK-004]`
+trilha-spec task graph                         # Mermaid; --dot for Graphviz, --program for the whole program
 trilha-spec mcp --write                        # the same over MCP, for Claude Code / Cursor
 ```
 
@@ -104,9 +125,9 @@ not change, because status names, field names and IDs are the protocol.
 
 `trilha-spec mcp` serves the protocol over stdio to any MCP host. Read-only by default
 (`trilha_list_tasks`, `trilha_get_task`, `trilha_next`, `trilha_context`, `trilha_list_specs`,
-`trilha_list_evidence`, `trilha_graph`); `--write` adds `trilha_move`, `trilha_spec_move`, `trilha_evidence` and
-`trilha_verify`. A tool that is not offered
-cannot be called.
+`trilha_list_evidence`, `trilha_coverage`, `trilha_graph`); `--write` adds `trilha_move`,
+`trilha_spec_move`, `trilha_evidence`, `trilha_attest` and `trilha_verify`. A tool that is not
+offered cannot be called.
 
 ```json
 { "mcpServers": { "trilha": { "command": "trilha-spec", "args": ["mcp", "--write"] } } }
