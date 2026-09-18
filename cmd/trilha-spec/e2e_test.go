@@ -371,7 +371,9 @@ func TestSignedEvidenceCLI(t *testing.T) {
 	if !strings.Contains(out, "private key "+filepath.Join(keys, "runner-01.key")) || !strings.Contains(out, "public key  .trilha/keys/runner-01.pub") {
 		t.Fatalf("keygen:\n%s", out)
 	}
-	if st, err := os.Stat(filepath.Join(keys, "runner-01.key")); err != nil || st.Mode().Perm() != 0o600 {
+	// Windows does not carry Unix permission bits, so the mode is only
+	// checked where it means something.
+	if st, err := os.Stat(filepath.Join(keys, "runner-01.key")); err != nil || (runtime.GOOS != "windows" && st.Mode().Perm() != 0o600) {
 		t.Fatalf("private key: %v %v", err, st)
 	}
 	if out, err := cli(t, dir, "keygen", "runner-01", "--out", keys); err == nil || !strings.Contains(out, "exists; pick another key id") {
@@ -432,5 +434,51 @@ func TestUsage(t *testing.T) {
 	}
 	if out := must(t, t.TempDir(), "version"); !strings.HasPrefix(out, "trilha-spec 0.") {
 		t.Fatalf("version:\n%s", out)
+	}
+}
+
+// TestRequirementCoverageCLI walks the traceability matrix end to end: a spec
+// declares external requirements, tasks cover them, doctor reports the gaps
+// and `spec show --coverage` answers the question a buyer asks.
+func TestRequirementCoverageCLI(t *testing.T) {
+	dir := t.TempDir()
+	must(t, dir, "init", "--name", "edital")
+	must(t, dir, "spec", "new", "Desafio 2")
+	// Requirements are front matter a person writes; the body stays the body.
+	p := filepath.Join(dir, ".trilha", "specs", "001-desafio-2.md")
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	withReqs := strings.Replace(string(b), "status: draft\n",
+		"status: draft\nrequirements:\n  - id: D2-R8\n    source: cp-01-2026\n    text: informar o cidadao\n  - id: D2-R9\n    text: prazo de 24h\n", 1)
+	if err := os.WriteFile(p, []byte(withReqs), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	must(t, dir, "task", "add", "Painel do cidadao", "--spec", "001-desafio-2", "--covers", "D2-R8", "--status", "ready", "--accept", "mostra o andamento")
+	if out := must(t, dir, "task", "show", "TASK-001"); !strings.Contains(out, "covers:\n  - D2-R8\n") {
+		t.Fatalf("covers not written:\n%s", out)
+	}
+	out := must(t, dir, "spec", "show", "001-desafio-2", "--coverage")
+	if !strings.Contains(out, "D2-R8") || !strings.Contains(out, "TASK-001 (ready, 0 ev)") || !strings.Contains(out, "D2-R9") {
+		t.Fatalf("coverage:\n%s", out)
+	}
+	must(t, dir, "evidence", "TASK-001", "add", "--note", "revisado")
+	if out := must(t, dir, "spec", "show", "001-desafio-2", "--coverage", "--json"); !strings.Contains(out, `"evidence": 1`) || !strings.Contains(out, `"id": "D2-R9"`) {
+		t.Fatalf("coverage json:\n%s", out)
+	}
+	// An uncovered requirement is a warning; a task citing an unknown id is a
+	// fault that fails doctor.
+	out = must(t, dir, "doctor")
+	if !strings.Contains(out, "requirement no task covers: 001-desafio-2 D2-R9") {
+		t.Fatalf("doctor warning:\n%s", out)
+	}
+	must(t, dir, "task", "add", "Fora do edital", "--covers", "D9-R9")
+	if out, err := cli(t, dir, "doctor"); err == nil || !strings.Contains(out, "task covers a requirement no spec declares: TASK-002 D9-R9") {
+		t.Fatalf("unknown requirement accepted:\n%s", out)
+	}
+	// The context pack hands the agent the words of the requirement.
+	if out := must(t, dir, "context", "TASK-001"); !strings.Contains(out, "### Requirements covered") || !strings.Contains(out, "**D2-R8** (cp-01-2026) — informar o cidadao") {
+		t.Fatalf("context:\n%s", out)
 	}
 }

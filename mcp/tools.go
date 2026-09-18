@@ -127,6 +127,20 @@ func Tools(l spec.Layout, write bool) []*Tool {
 			},
 		},
 		{
+			Name:        "trilha_coverage",
+			Description: "The requirement traceability matrix: every external requirement a spec declares, the tasks that cover it, their status and how many evidence records each has. Narrow it to one spec with {\"spec\": \"009-name\"}.",
+			Schema:      json.RawMessage(`{"type":"object","properties":{"spec":{"type":"string"}}}`),
+			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+				var in struct{ Spec string }
+				json.Unmarshal(args, &in)
+				rows, err := task.Cover(l, in.Spec)
+				if err != nil {
+					return "", err
+				}
+				return js(rows), nil
+			},
+		},
+		{
 			Name:        "trilha_graph",
 			Description: "The dependency graph as Mermaid.",
 			Func: func(ctx context.Context, args json.RawMessage) (string, error) {

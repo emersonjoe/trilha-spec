@@ -24,7 +24,7 @@ func TestStdioRoundTrip(t *testing.T) {
 	st.Move(tk.ID, task.Ready)
 
 	ro := NewServer("trilha-spec", "test", Tools(l, false)...)
-	if n := len(ro.Tools()); n != 7 {
+	if n := len(ro.Tools()); n != 8 {
 		t.Fatalf("read-only tools = %d", n)
 	}
 	rw := NewServer("trilha-spec", "test", Tools(l, true)...)

@@ -78,8 +78,11 @@ type Spec struct {
 	// Evidence lists the commands a reviewer must see run before the spec is
 	// done: program and arguments, never a shell, exactly like task checks.
 	Evidence []string `json:"evidence,omitempty"`
-	Body     string   `json:"body,omitempty"`
-	Fields   Fields   `json:"-"`
+	// Requirements are the external requirements this spec answers, one
+	// block each; tasks point back at them with `covers`.
+	Requirements []Requirement `json:"requirements,omitempty"`
+	Body         string        `json:"body,omitempty"`
+	Fields       Fields        `json:"-"`
 }
 
 // HasSecurityImpact answers whether the spec declares any of the security
@@ -111,6 +114,7 @@ func ParseSpec(src []byte) (*Spec, error) {
 		TrustBoundaries: d.Fields.GetList("trust_boundaries"),
 		Controls:        d.Fields.GetList("controls"),
 		Evidence:        d.Fields.GetList("evidence"),
+		Requirements:    requirementsFrom(d.Fields),
 		Body:            d.Body,
 		Fields:          d.Fields,
 	}
@@ -150,6 +154,7 @@ func (s *Spec) Validate() error {
 			}
 		}
 	}
+	errs = append(errs, validateRequirements(s.Requirements)...)
 	sort.Strings(errs)
 	if len(errs) > 0 {
 		return errors.New("spec " + s.ID + ": " + strings.Join(errs, "; "))
@@ -191,6 +196,11 @@ func (s *Spec) Bytes() []byte {
 			d.Fields.Delete(kv.k)
 		}
 	}
+	if len(s.Requirements) > 0 {
+		d.Fields.SetItems("requirements", requirementFields(s.Requirements))
+	} else {
+		d.Fields.Delete("requirements")
+	}
 	return d.Bytes()
 }
 
@@ -218,7 +228,7 @@ const (
 )
 
 // warnings are the problem codes doctor reports without failing.
-var warnings = map[string]bool{ProblemSpecNoSecurity: true}
+var warnings = map[string]bool{ProblemSpecNoSecurity: true, ProblemRequirementUncovered: true}
 
 // Warning answers whether the problem is advice rather than a fault.
 func (p Problem) Warning() bool { return warnings[p.Code] }

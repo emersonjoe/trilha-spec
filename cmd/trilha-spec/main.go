@@ -35,9 +35,9 @@ usage: trilha-spec <command> [flags]
 
   init [dir]                    create .trilha/ (project, constitution, agents)
   spec new <title> [--issue N] [--body TEXT | --body-file PATH] [--asset A]... [--boundary B]... [--control C]... [--evidence CMD]...
-  spec list [--status S] | show <id> | move <id> <status>
+  spec list [--status S] | show <id> [--coverage] | move <id> <status>
   spec set <id> [--issue N] [--supersedes A,B] [--depends A,B] [--asset A]... [--boundary B]... [--control C]... [--evidence CMD]...
-  task add <title> [--spec ID] [--depends A,B] [--agent N] [--status S] [--accept C]... [--check CMD]...
+  task add <title> [--spec ID] [--depends A,B] [--agent N] [--status S] [--covers R,S] [--accept C]... [--check CMD]...
            [--body TEXT | --body-file PATH]   (PATH "-" reads stdin)
   task list [--status S] | show <id> | next | move <id> <status> | graph [--dot]
   agent list | show <name>
@@ -281,6 +281,7 @@ func cmdSpec(args []string, out io.Writer) error {
 	case "show":
 		fs := flags("spec show")
 		asJSON := fs.Bool("json", false, "")
+		coverage := fs.Bool("coverage", false, "the requirement → tasks → status → evidence matrix")
 		pos, err := parse(fs, args[1:])
 		if err != nil {
 			return err
@@ -291,6 +292,13 @@ func cmdSpec(args []string, out io.Writer) error {
 		s, err := l.LoadSpec(pos[0])
 		if err != nil {
 			return err
+		}
+		if *coverage {
+			rows, err := task.Cover(l, s.ID)
+			if err != nil {
+				return err
+			}
+			return printCoverage(out, rows, *asJSON)
 		}
 		if *asJSON {
 			return printJSON(out, s)
@@ -315,6 +323,7 @@ func cmdTask(args []string, out io.Writer) error {
 		specID := fs.String("spec", "", "specification id")
 		deps := fs.String("depends", "", "comma-separated task ids")
 		ag := fs.String("agent", "", "agent name")
+		covers := fs.String("covers", "", "comma-separated requirement ids this task delivers")
 		status := fs.String("status", string(task.Idea), "initial status")
 		var accept, checks multi
 		fs.Var(&accept, "accept", "acceptance criterion (repeatable)")
@@ -340,6 +349,7 @@ func cmdTask(args []string, out io.Writer) error {
 			t.Checks = checks
 			t.Body = text
 			t.DependsOn = splitList(*deps)
+			t.Covers = splitList(*covers)
 		})
 		if err != nil {
 			return err
@@ -923,23 +933,35 @@ func cmdDoctor(args []string, out io.Writer) error {
 		return err
 	}
 	var problems, warns []string
-	for _, p := range st.Layout.Doctor() {
-		problems = append(problems, doctorMessage(p))
+	add := func(p spec.Problem) {
+		if p.Warning() {
+			warns = append(warns, doctorMessage(p))
+		} else {
+			problems = append(problems, doctorMessage(p))
+		}
 	}
-	if _, err := st.List(); err != nil {
-		problems = append(problems, err.Error())
+	for _, p := range st.Layout.Doctor() {
+		add(p)
+	}
+	tasks, tasksErr := st.List()
+	if tasksErr != nil {
+		problems = append(problems, tasksErr.Error())
 	} else if _, err := st.Graph(); err != nil {
 		problems = append(problems, err.Error())
 	}
-	if specs, err := st.Layout.ListSpecs(); err != nil {
-		problems = append(problems, err.Error())
+	specs, specsErr := st.Layout.ListSpecs()
+	if specsErr != nil {
+		problems = append(problems, specsErr.Error())
 	} else {
 		for _, p := range st.Layout.CheckSpecs(specs) {
-			if p.Warning() {
-				warns = append(warns, doctorMessage(p))
-			} else {
-				problems = append(problems, doctorMessage(p))
-			}
+			add(p)
+		}
+	}
+	// Traceability needs both sides: the requirements a spec declares and
+	// the tasks that claim to cover them.
+	if tasksErr == nil && specsErr == nil {
+		for _, p := range task.CheckRequirements(specs, tasks) {
+			add(p)
 		}
 	}
 	if _, err := agent.List(st.Layout); err != nil {
@@ -967,6 +989,27 @@ func rel(l spec.Layout, p string) string {
 		return r
 	}
 	return p
+}
+
+// printCoverage renders the requirement matrix: one line per requirement,
+// the tasks that cover it with their status and how much evidence each has.
+// An uncovered requirement shows a dash, which is the line a buyer looks for.
+func printCoverage(out io.Writer, rows []task.Coverage, asJSON bool) error {
+	if asJSON {
+		return printJSON(out, rows)
+	}
+	fmt.Fprintf(out, "%-16s %-40s %s\n", T("REQUIREMENT"), T("TEXT"), T("TASKS"))
+	for _, r := range rows {
+		var covers []string
+		for _, t := range r.Tasks {
+			covers = append(covers, fmt.Sprintf("%s (%s, %d ev)", t.ID, t.Status, t.Evidence))
+		}
+		if len(covers) == 0 {
+			covers = []string{"—"}
+		}
+		fmt.Fprintf(out, "%-16s %-40s %s\n", r.Requirement.ID, trunc(r.Requirement.Text, 40), strings.Join(covers, ", "))
+	}
+	return nil
 }
 
 // splitList cuts a comma-separated flag into its items, blanks dropped.

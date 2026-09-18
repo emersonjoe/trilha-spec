@@ -79,7 +79,9 @@ type Task struct {
 	// Spec is the specification this task implements (a spec ID), if any.
 	Spec string `json:"spec,omitempty"`
 	// Agent is who executes it: an agent name from .trilha/agents/.
-	Agent     string   `json:"agent,omitempty"`
+	Agent string `json:"agent,omitempty"`
+	// Covers names the external requirements (§11) this task delivers.
+	Covers    []string `json:"covers,omitempty"`
 	DependsOn []string `json:"depends_on,omitempty"`
 	// Acceptance is what must be true to close, in words a reviewer checks.
 	Acceptance []string `json:"acceptance,omitempty"`
@@ -121,6 +123,7 @@ func Parse(src []byte) (*Task, error) {
 		Status:           Status(d.Fields.Get("status")),
 		Spec:             d.Fields.Get("spec"),
 		Agent:            d.Fields.Get("agent"),
+		Covers:           d.Fields.GetList("covers"),
 		DependsOn:        d.Fields.GetList("depends_on"),
 		Acceptance:       d.Fields.GetList("acceptance"),
 		Checks:           d.Fields.GetList("checks"),
@@ -166,6 +169,11 @@ func (t *Task) Validate() error {
 			errs = append(errs, "a task cannot depend on itself")
 		}
 	}
+	for _, c := range t.Covers {
+		if !spec.ValidRequirementID(c) {
+			errs = append(errs, fmt.Sprintf("covers %q is not a requirement id", c))
+		}
+	}
 	if t.Status == Ready || t.Status == Running {
 		if len(t.Acceptance) == 0 {
 			errs = append(errs, string(t.Status)+" needs at least one acceptance criterion")
@@ -198,6 +206,7 @@ func (t *Task) Bytes() []byte {
 	d.Fields.Set("status", string(t.Status))
 	setOpt(&d.Fields, "spec", t.Spec)
 	setOpt(&d.Fields, "agent", t.Agent)
+	setListOpt(&d.Fields, "covers", t.Covers)
 	d.Fields.SetList("depends_on", t.DependsOn)
 	d.Fields.SetList("acceptance", t.Acceptance)
 	d.Fields.SetList("checks", t.Checks)
@@ -227,7 +236,7 @@ func (t *Task) Bytes() []byte {
 	return d.Bytes()
 }
 
-var known = map[string]bool{"id": true, "title": true, "status": true, "spec": true, "agent": true, "depends_on": true, "acceptance": true, "checks": true, "expected_files": true, "routes": true, "scenarios": true, "accessibility": true, "security_controls": true, "max_attempts": true, "token_budget": true, "attempt": true, "retry_of": true, "failure_class": true, "repair_reason": true, "created": true, "updated": true}
+var known = map[string]bool{"id": true, "title": true, "status": true, "spec": true, "agent": true, "covers": true, "depends_on": true, "acceptance": true, "checks": true, "expected_files": true, "routes": true, "scenarios": true, "accessibility": true, "security_controls": true, "max_attempts": true, "token_budget": true, "attempt": true, "retry_of": true, "failure_class": true, "repair_reason": true, "created": true, "updated": true}
 
 func setOpt(f *spec.Fields, k, v string) {
 	if v != "" {

@@ -437,3 +437,73 @@ func TestProjectLimitsAndPause(t *testing.T) {
 		t.Fatalf("save lost fields:\n%s", b)
 	}
 }
+
+// TestBlockLists covers the two shapes protocol 0.3 added to the grammar: a
+// list of blocks (`requirements:`, `milestones:`) and a block that holds a
+// list (`review:`).
+func TestBlockLists(t *testing.T) {
+	src := "---\nid: 009-x\nrequirements:\n  - id: D2-R8\n    source: \"cp-01-2026#anexo-I\"\n    text: informar o cidadao\n  - id: D2-R9\n    text: \"prazo: 24h\"\nreview:\n  quorum: 2\n  roles: [uat, legal]\n---\n"
+	// What the writer emits: an inline list becomes a block list, like any
+	// other list in this grammar.
+	canon := strings.Replace(src, "  roles: [uat, legal]\n", "  roles:\n    - uat\n    - legal\n", 1)
+	d, err := Parse([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := d.Fields.GetItems("requirements")
+	if len(items) != 2 || items[0].Get("id") != "D2-R8" || items[0].Get("source") != "cp-01-2026#anexo-I" {
+		t.Fatalf("requirements = %+v", items)
+	}
+	if items[1].Get("text") != "prazo: 24h" {
+		t.Fatalf("quoted scalar in a block = %q", items[1].Get("text"))
+	}
+	sub, ok := d.Fields.GetFields("review")
+	if !ok || sub.Get("quorum") != "2" || strings.Join(sub.GetList("roles"), ",") != "uat,legal" {
+		t.Fatalf("review = %+v %v", sub, ok)
+	}
+	if d.Fields.GetItems("review") != nil || d.Fields.GetList("requirements") != nil {
+		t.Fatal("a block is not a list of blocks, and the other way round")
+	}
+	if string(d.Bytes()) != canon {
+		t.Fatalf("not stable:\n%s\n---\n%s", canon, d.Bytes())
+	}
+	if again, err := Parse(d.Bytes()); err != nil || string(again.Bytes()) != canon {
+		t.Fatalf("second round trip: %v\n%s", err, again.Bytes())
+	}
+	// GetMap still answers the scalars of a block, and skips the list.
+	if m := d.Fields.GetMap("review"); len(m) != 1 || m["quorum"] != "2" {
+		t.Fatalf("GetMap = %v", m)
+	}
+	// The JSON shape: a list of blocks is a list of objects.
+	if got := d.Fields.Map()["requirements"].([]map[string]any); got[0]["id"] != "D2-R8" {
+		t.Fatalf("Map() = %v", got)
+	}
+	// Scalars and blocks never mix in one list.
+	if _, err := Parse([]byte("---\nxs:\n  - a\n  - id: b\n---\n")); err == nil {
+		t.Fatal("mixed list accepted")
+	}
+	// A comma in a quoted item is not a separator, and `- x: y` quoted is a
+	// scalar, not a block.
+	d2, err := Parse([]byte("---\nxs:\n  - \"a: b\"\n---\n"))
+	if err != nil || strings.Join(d2.Fields.GetList("xs"), "|") != "a: b" {
+		t.Fatalf("quoted item: %v %+v", err, d2.Fields.GetList("xs"))
+	}
+	// SetItems writes what Parse reads.
+	var f Fields
+	var one Fields
+	one.Set("id", "M2")
+	one.SetList("roles", []string{"uat"})
+	f.SetItems("milestones", []Fields{one})
+	if got := (&Doc{Fields: f}).Bytes(); string(got) != "---\nmilestones:\n  - id: M2\n    roles:\n      - uat\n---\n" {
+		t.Fatalf("SetItems:\n%s", got)
+	}
+	if again, err := Parse((&Doc{Fields: f}).Bytes()); err != nil || again.Fields.GetItems("milestones")[0].Get("id") != "M2" {
+		t.Fatalf("round trip: %v", err)
+	}
+	// An empty list of blocks is `[]`, like any other empty list.
+	var g Fields
+	g.SetItems("milestones", nil)
+	if got := (&Doc{Fields: g}).Bytes(); string(got) != "---\nmilestones: []\n---\n" {
+		t.Fatalf("empty items:\n%s", got)
+	}
+}

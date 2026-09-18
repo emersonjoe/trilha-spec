@@ -30,7 +30,11 @@ type Pack struct {
 	// Evidence carries a verdict per record, checked against .trilha/keys:
 	// the agent sees what is proven and what is only claimed.
 	Evidence []task.Checked `json:"evidence,omitempty"`
-	Agent    *agent.Agent   `json:"agent,omitempty"`
+	// Requirements are the external requirements the task covers, with
+	// their text, so the agent reads the scope in the words of the document
+	// it came from.
+	Requirements []spec.Requirement `json:"requirements,omitempty"`
+	Agent        *agent.Agent       `json:"agent,omitempty"`
 	// Context is .trilha/context/*.md, by file name.
 	Context map[string]string `json:"context,omitempty"`
 }
@@ -70,6 +74,20 @@ func Build(l spec.Layout, id string) (*Pack, error) {
 			return nil, err
 		}
 		p.Evidence = keys.CheckAll(evidence)
+	}
+	if len(t.Covers) > 0 {
+		specs, err := l.ListSpecs()
+		if err != nil {
+			return nil, err
+		}
+		declared := task.Requirements(specs)
+		for _, c := range t.Covers {
+			if r, ok := declared[c]; ok {
+				p.Requirements = append(p.Requirements, r)
+			} else {
+				p.Requirements = append(p.Requirements, spec.Requirement{ID: c})
+			}
+		}
 	}
 	name := t.Agent
 	if name == "" {
@@ -168,6 +186,20 @@ func (p *Pack) Markdown() string {
 		b.WriteString(body + "\n\n")
 	}
 	list(&b, "Acceptance criteria", p.Task.Acceptance)
+	if len(p.Requirements) > 0 {
+		b.WriteString("### Requirements covered\n\n")
+		for _, r := range p.Requirements {
+			fmt.Fprintf(&b, "- **%s**", r.ID)
+			if r.Source != "" {
+				fmt.Fprintf(&b, " (%s)", r.Source)
+			}
+			if r.Text != "" {
+				b.WriteString(" — " + r.Text)
+			}
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+	}
 	if len(p.Task.Checks) > 0 {
 		b.WriteString("### Checks that will run\n\n")
 		for _, c := range p.Task.Checks {

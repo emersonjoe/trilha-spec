@@ -38,14 +38,22 @@ chave:
   - item
 chave:
   sub: escalar
-  sub: escalar
+  sub: [a, b]
+chave:
+  - sub: escalar
+    sub: escalar
+  - sub: escalar
 ---
 
 Corpo, Markdown livre.
 ```
 
-A gramática é de propósito um subconjunto de YAML: escalares, listas de escalares, mapas de
-escalares de um nível (`chave: {}` é um mapa vazio), comentários `#` e linhas em branco. Entre aspas duplas, `\"` e `\\` são os únicos escapes; aspas simples
+A gramática é de propósito um subconjunto de YAML: escalares, listas de escalares, um **bloco**
+de escalares e listas sob uma chave (`chave: {}` é um bloco vazio), uma **lista de blocos**,
+comentários `#` e linhas em branco. O aninhamento para aí: um bloco tem escalares e listas,
+nunca outro bloco. Um item `- ` que se lê como `sub: valor` sem aspas abre um bloco; um item
+escalar com dois-pontos vai entre aspas, que é como o escritor o emite, e uma lista nunca
+mistura os dois. Entre aspas duplas, `\"` e `\\` são os únicos escapes; aspas simples
 carregam o texto como está. Chave desconhecida é preservada na escrita. A ordem dos campos é
 estável: campos do protocolo primeiro, na ordem abaixo, depois os desconhecidos na ordem lida.
 
@@ -59,6 +67,7 @@ estável: campos do protocolo primeiro, na ordem abaixo, depois os desconhecidos
 | `spec` | não | o ID da especificação que implementa |
 | `agent` | não | nome de agente; senão `project.default_agent` |
 | `depends_on` | não | IDs de task; todos precisam existir; sem ciclo |
+| `covers` | não | IDs de requisito que a task entrega (§11); todos precisam ser declarados por uma spec |
 | `acceptance` | de `ready` em diante | o que precisa ser verdade para fechar, em palavras |
 | `checks` | não | comandos que o `verify` roda; programa + argumentos, sem shell |
 | `attempt`, `max_attempts`, `token_budget` | não | limites de execução e metadados da tentativa atual |
@@ -151,7 +160,8 @@ falha a verificação com uma `note` dizendo isso.
 ## 6. Pacote de contexto
 
 O que um agente recebe para uma task, nesta ordem: projeto, constituição, o próprio manifesto,
-a especificação, a task (corpo, aceite, checks, dependências com status, evidência até aqui),
+a especificação, a task (corpo, aceite, os requisitos que ela cobre com o texto deles, checks,
+dependências com status, evidência até aqui),
 todo arquivo de `context/`. Markdown para prompt, JSON para ferramenta. O pacote termina
 dizendo ao agente para não marcar a task como done: isso é decisão do revisor.
 
@@ -175,6 +185,7 @@ network}, `constraints[]`. O protocolo carrega o manifesto; fazê-lo valer é pa
 | `trilha_graph` | | |
 | `trilha_list_specs` | | `status?` |
 | `trilha_list_evidence` | | `id`; cada registro com seu `verdict` (e `reason` quando inválido) |
+| `trilha_coverage` | | `spec?`; a matriz de requisitos da §11 |
 | `trilha_move` | sim | `id`, `status` |
 | `trilha_evidence` | sim | `id`, `kind` (note \| artifact), `note?`, `files?`, `by?` |
 | `trilha_verify` | sim | `id`, `by?` |
@@ -214,11 +225,33 @@ Attempt carrega seu custo com os nomes do registro de evidência `run` (§5): `p
 | `trust_boundaries` | não | as fronteiras que ela cruza (`browser → api`) |
 | `controls` | não | os controles que ela afeta (`ASVS V4.1`); identificadores livres |
 | `evidence` | não | comandos que um revisor precisa ver rodar: programa e argumentos, sem shell, como `checks` de task (§3) |
+| `requirements` | não | requisitos externos que esta spec responde, um bloco cada: `id`, `source`, `text` |
 
 Os quatro campos de segurança são o **impacto de segurança** da spec. O protocolo os carrega e
 não julga nada sobre eles: se os controles bastam é decisão do revisor. O pacote de contexto
 (§6) os entrega ao agente ao lado do aceite e dos checks da task; uma spec `approved` que não
 declara nenhum deles é um aviso do `doctor`, não uma falha.
+
+### Requisitos
+
+Quando a fonte do escopo é um documento fora do repositório — a lista de requisitos de um
+edital, um artigo de lei, um KPI de contrato — a spec carrega a referência e as tasks apontam
+de volta para ela:
+
+```
+requirements:
+  - id: D2-R8
+    source: "cp-01-2026#anexo-I"
+    text: informar o cidadao sobre o andamento
+```
+
+Um `id` é identificador livre sem espaço nem vírgula, para que `covers: [D2-R8, D2-R9]` nunca
+parta um ao meio; é único no projeto, porque é por ele que `covers` o nomeia. O protocolo não
+julga `source` nem `text`: carrega, entrega ao agente no pacote de contexto (§6) e responde a
+matriz — requisito → tasks → status → quantidade de evidência — em `spec show --coverage` e em
+`trilha_coverage` (§8). O `doctor` aponta requisito que nenhuma task cobre (aviso: o escopo
+está declarado, o trabalho ainda não foi cortado), task que cobre um id que nenhuma spec
+declara, e o mesmo id declarado por duas specs.
 
 O corpo é a especificação: por quê, o que muda, fora de escopo, aceitação. `draft` está sendo
 escrita; `approved` foi acordada e pode virar tasks; `done` tem toda task entregue; `rejected`

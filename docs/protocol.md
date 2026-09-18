@@ -38,14 +38,22 @@ key:
   - item
 key:
   sub: scalar
-  sub: scalar
+  sub: [a, b]
+key:
+  - sub: scalar
+    sub: scalar
+  - sub: scalar
 ---
 
 Body, free Markdown.
 ```
 
-The grammar is deliberately a subset of YAML: scalars, lists of scalars, maps of scalars one
-level deep (`key: {}` is an empty map), `#` comments and blank lines. Inside double quotes, `\"` and `\\` are the only escapes; single quotes carry text
+The grammar is deliberately a subset of YAML: scalars, lists of scalars, a **block** of
+scalars and lists under one key (`key: {}` is an empty block), a **list of blocks**, `#`
+comments and blank lines. Nesting stops there: a block holds scalars and lists, never another
+block. A `- ` item that reads as an unquoted `sub: value` opens a block; a scalar item holding
+a colon is quoted, which is how the writer emits it, and one list never mixes the two. Inside
+double quotes, `\"` and `\\` are the only escapes; single quotes carry text
 as is. A key a reader does not know is preserved on write. Field order is stable: protocol
 fields first, in the order below, then unknown fields in the order read.
 
@@ -59,6 +67,7 @@ fields first, in the order below, then unknown fields in the order read.
 | `spec` | no | the specification ID it implements |
 | `agent` | no | an agent name; `project.default_agent` otherwise |
 | `depends_on` | no | task IDs; every one must exist; no cycles |
+| `covers` | no | requirement IDs the task delivers (§11); every one must be declared by a spec |
 | `acceptance` | for `ready` on | what must be true to close, in words |
 | `checks` | no | commands `verify` runs; program + arguments, no shell |
 | `attempt`, `max_attempts`, `token_budget` | no | execution limits and current attempt metadata |
@@ -149,8 +158,8 @@ fails verification with a `note` saying so.
 ## 6. Context pack
 
 What an agent receives for a task, in this order: project, constitution, its own manifest,
-the specification, the task (body, acceptance, checks, dependencies with their status,
-evidence so far), every file in `context/`. Markdown for a prompt, JSON for a tool. The pack
+the specification, the task (body, acceptance, the requirements it covers with their text,
+checks, dependencies with their status, evidence so far), every file in `context/`. Markdown for a prompt, JSON for a tool. The pack
 ends by telling the agent not to mark the task done: that is the reviewer's decision.
 
 ## 7. Agent manifest
@@ -172,6 +181,7 @@ capability `tools` only.
 | `trilha_context` | | `id`, `format?` (markdown \| json) |
 | `trilha_list_specs` | | `status?` |
 | `trilha_list_evidence` | | `id`; every record with its `verdict` (and `reason` when invalid) |
+| `trilha_coverage` | | `spec?`; the requirement matrix of §11 |
 | `trilha_graph` | | |
 | `trilha_move` | yes | `id`, `status` |
 | `trilha_evidence` | yes | `id`, `kind` (note \| artifact), `note?`, `files?`, `by?` |
@@ -212,11 +222,33 @@ carries its cost under the names a `run` evidence record uses (§5): `provider`,
 | `trust_boundaries` | no | the boundaries it crosses (`browser → api`) |
 | `controls` | no | the controls it affects (`ASVS V4.1`); free identifiers |
 | `evidence` | no | commands a reviewer must see run: program and arguments, no shell, as task `checks` (§3) |
+| `requirements` | no | external requirements this spec answers, one block each: `id`, `source`, `text` |
 
 The four security fields are the **security impact** of the spec. The protocol carries them and
 judges nothing about them: whether the controls are sufficient is the reviewer's call. The
 context pack (§6) hands them to the agent next to the task's acceptance and checks; an
 `approved` spec that declares none of them is a `doctor` warning, not a fault.
+
+### Requirements
+
+When the source of scope is a document outside the repository — a public tender's requirement
+list, an article of a law, a KPI in a contract — the spec carries the reference and the tasks
+point back at it:
+
+```
+requirements:
+  - id: D2-R8
+    source: "cp-01-2026#anexo-I"
+    text: informar o cidadao sobre o andamento
+```
+
+An `id` is a free identifier without a space or a comma, so `covers: [D2-R8, D2-R9]` never
+splits one; it is unique across the project, because `covers` names it and nothing else. The
+protocol judges nothing about `source` and `text`: it carries them, hands them to the agent in
+the context pack (§6) and answers the matrix — requirement → tasks → status → evidence count —
+to `spec show --coverage` and to `trilha_coverage` (§8). `doctor` reports a requirement no task
+covers (a warning: the scope is declared, the work is not cut yet), a task covering an id no
+spec declares, and the same id declared by two specs.
 
 The body is the specification: why, what changes, out of scope, acceptance. A `draft` is being
 written; `approved` is agreed and tasks may be cut from it; `done` has every task delivered;
