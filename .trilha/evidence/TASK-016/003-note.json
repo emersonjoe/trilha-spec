@@ -3,7 +3,7 @@
   "seq": 3,
   "kind": "note",
   "at": "2026-09-18T18:16:15Z",
-  "by": "claude-opus-5",
+  "by": "emersonjoe",
   "exit_code": 0,
   "passed": true,
   "note": "Requirement traceability: spec requirements[{id,source,text}], task covers[]; front matter grammar gained a block with lists and a list of blocks; spec show --coverage, trilha_coverage, doctor codes and the context pack; protocol 0.3 \u00c2\u00a72/\u00c2\u00a73/\u00c2\u00a76/\u00c2\u00a78/\u00c2\u00a711 in both locales."
