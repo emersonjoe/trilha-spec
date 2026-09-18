@@ -3,7 +3,7 @@
   "seq": 3,
   "kind": "note",
   "at": "2026-09-18T18:50:47Z",
-  "by": "claude-opus-5",
+  "by": "emersonjoe",
   "exit_code": 0,
   "passed": true,
   "note": "Cross-repository dependencies: project.md repos{alias:url}, depends_on accepts alias:TASK-NNN, a task.Resolver interface with a sibling-checkout implementation (--repo alias=path) and no network in this module; unresolved dependencies block with waiting:<alias>:TASK-NNN. Optional program.md above the checkouts carries the repositories and shared milestones, read by graph --program; doctor gains repo-unknown."

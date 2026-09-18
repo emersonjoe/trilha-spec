@@ -3,7 +3,7 @@
   "seq": 3,
   "kind": "note",
   "at": "2026-09-18T18:35:10Z",
-  "by": "claude-opus-5",
+  "by": "emersonjoe",
   "exit_code": 0,
   "passed": true,
   "note": "Evidence kind eval: metric, value, unit, threshold, comparator, dataset{id,sha256}, passed; verify records one eval per JSON metric line a check prints and a failing eval fails verification; acceptance metric form; doctor code; CLI evidence add --eval; last value per metric in the context pack; records and --json no longer HTML-escape."

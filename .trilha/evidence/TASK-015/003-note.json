@@ -3,7 +3,7 @@
   "seq": 3,
   "kind": "note",
   "at": "2026-09-18T18:42:16Z",
-  "by": "claude-opus-5",
+  "by": "emersonjoe",
   "exit_code": 0,
   "passed": true,
   "note": "Attestation evidence: kind attestation with role, statement and refs[], signed with the existing Ed25519 scheme; task review{quorum, roles} and review->done refused until N distinct signed attestations in the asked roles exist, with the refusal naming what is missing; MCP trilha_attest; quorum in the context pack; two doctor checks."
