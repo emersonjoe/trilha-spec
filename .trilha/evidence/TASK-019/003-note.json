@@ -1,0 +1,10 @@
+{
+  "task": "TASK-019",
+  "seq": 3,
+  "kind": "note",
+  "at": "2026-09-19T15:55:09Z",
+  "by": "emersonjoe",
+  "exit_code": 0,
+  "passed": true,
+  "note": "Failure taxonomy: seção nova em docs/protocol.md e docs/pt-BR/protocol.md §10 com o vocabulário recomendado para failure_class (environment_missing_tool, test_failure, lint_failure, timeout, provider_transient, agent_error) e o papel de error_code ao lado dele. Campo continua texto livre no schema; provider_transient documenta o que execution/testdata/run-v1.json já assumia."
+}

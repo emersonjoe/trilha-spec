@@ -1,0 +1,12 @@
+{
+  "task": "TASK-019",
+  "seq": 1,
+  "kind": "check",
+  "at": "2026-09-19T15:54:59Z",
+  "by": "trilha-spec verify",
+  "command": "go vet ./...",
+  "dir": "/Users/emersonoliveiradossantos/Projetos/github/trilha-spec",
+  "exit_code": 0,
+  "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "passed": true
+}

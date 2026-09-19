@@ -297,6 +297,27 @@ multiple Attempts. Repair lineage uses `retry_of` with a Run ID, never a Task ID
 carries its cost under the names a `run` evidence record uses (§5): `provider`, `model`,
 `tokens_in`, `tokens_out`, `cost`, `currency`.
 
+### Failure taxonomy
+
+`failure_class` on an Attempt (and, once an Outcome has failed, on the Run's `result`) is free
+text: the schema does not close it, so a runner is never blocked from reporting something this
+list has not thought of. What follows is the recommended vocabulary — a runner should reuse one
+of these values whenever the failure fits, so a control plane can render and count failures
+without parsing `message` or `error_code`:
+
+| `failure_class` | Meaning |
+|---|---|
+| `environment_missing_tool` | a binary or interpreter `checks` needs is not on the worker (e.g. exit 127) |
+| `test_failure` | the check ran and a test genuinely failed |
+| `lint_failure` | the check ran and a lint/format rule genuinely failed |
+| `timeout` | the attempt did not finish inside its time budget |
+| `provider_transient` | the AI provider failed in a way expected to clear on retry (rate limit, 5xx) |
+| `agent_error` | the AI produced no valid change (malformed diff, refusal, out of context) |
+
+`error_code` stays a free string next to it — the provider- or tool-specific detail (an SDK
+error name, an exit code, a lint rule ID) that `failure_class` deliberately does not carry so
+the category stays stable across providers and tool versions.
+
 ## 11. Specification
 
 | Field | Required | Meaning |
