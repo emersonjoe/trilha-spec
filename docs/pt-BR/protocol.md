@@ -300,6 +300,28 @@ várias Attempts. A linhagem de correção usa `retry_of` com ID de Run, nunca I
 Attempt carrega seu custo com os nomes do registro de evidência `run` (§5): `provider`,
 `model`, `tokens_in`, `tokens_out`, `cost`, `currency`.
 
+### Taxonomia de falha
+
+`failure_class`, em uma Attempt (e, quando um Outcome falha, no `result` da Run), é texto
+livre: o schema não fecha a lista, então um runner nunca fica impedido de relatar algo que esta
+lista não previu. O que segue é o vocabulário recomendado — um runner deve reaproveitar um
+destes valores sempre que a falha se encaixar, para que um control plane consiga renderizar e
+contar falhas sem parsear `message` ou `error_code`:
+
+| `failure_class` | Significado |
+|---|---|
+| `environment_missing_tool` | um binário ou interpretador que `checks` precisa não está no worker (ex.: exit 127) |
+| `test_failure` | o check rodou e um teste de fato reprovou |
+| `lint_failure` | o check rodou e uma regra de lint/formatação de fato reprovou |
+| `timeout` | a tentativa não terminou dentro do orçamento de tempo |
+| `provider_transient` | o provedor de IA falhou de um jeito que se espera que passe numa nova tentativa (rate limit, 5xx) |
+| `agent_error` | a IA não produziu uma mudança válida (diff malformado, recusa, fora de contexto) |
+
+`error_code` continua sendo uma string livre ao lado dele — o detalhe específico do provedor ou
+da ferramenta (um nome de erro de SDK, um exit code, um ID de regra de lint) que `failure_class`
+deliberadamente não carrega, para que a categoria permaneça estável entre provedores e versões
+de ferramenta.
+
 ## 11. Especificação
 
 | Campo | Obrigatório | Significado |
