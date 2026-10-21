@@ -1,9 +1,7 @@
 # trilha-spec — the open protocol for work agents can execute
 
-<!-- SPECKIT START -->
-For additional context about technologies to be used, project structure,
-shell commands, and other important information, read the current plan
-<!-- SPECKIT END -->
+Specs, tasks and evidence live in `.trilha/` and nowhere else; `specs/NNN/` folders are frozen history.
+Why, and what `.specify/` still holds: `docs/adr/003-fonte-da-verdade.md`.
 
 ## Commands
 
@@ -25,7 +23,8 @@ shell commands, and other important information, read the current plan
 - Every file under `.trilha/` is Markdown + front matter or JSON; no other formats.
 - Status transitions are the ones in `task.Transitions`; a new one is a spec, not a patch.
 - Public text (README, docs, CLI) in English with pt-BR in the same commit; specs and ADRs in pt-BR.
-- One spec per session; short spec (`.specify/templates/spec-curta-template.md`) for small changes.
+- One spec per session, written with `trilha-spec spec new` into `.trilha/specs/` (adr/003); the
+  template in `.specify/templates/spec-curta-template.md` is the outline for a short one.
 - **The hands-on chapter follows the code.** The Trilha site teaches this tool in
   `https://emersonjoe.github.io/trilha/learn/agentic-protocol` (pt: `/pt/aprender/agentico-protocolo`). A change that alters what a user types or
   sees — a command, a flag, a file format, an output — updates that chapter in the same session:

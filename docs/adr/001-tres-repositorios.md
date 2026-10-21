@@ -105,7 +105,8 @@ em duas frentes:
    `.trilha/cache/.gitignore` em vez de `.trilha/.gitignore`, trocar a linha `.trilha/` do
    scaffold e do `audit` por `.trilha/cache/` e `.trilha/runs/`. É uma spec curta no
    repositório `trilha`; até ela sair, quem usa os dois roda `trilha-spec doctor` depois de
-   `trilha dev`.
+   `trilha dev`. **Feito**: `trilha` 0.124.0 (2026-09-12) moveu o cache para `.trilha/cache/`
+   e o scaffold passou a ignorar só `.trilha/cache/` e `.trilha/runs/`.
 
 ## Dependências entre módulos
 
@@ -123,6 +124,7 @@ roteamento por arquivos, `task` in-process como fila da Fase 0, `audit`, `Limit`
 
 ## O que não é decidido aqui
 
-- Versão 1.0 do protocolo; esta é 0.1.
+- Versão 1.0 do protocolo. Esta ADR foi escrita na 0.1; em 2026-10-20 o protocolo está na 0.3
+  (specs 003–013) e o caminho até a 1.0 é o item RM-055 do roadmap da stack.
 - Assinatura de evidência (cadeia de custódia entre runner e cloud).
 - Se `trilha-cloud` vira open core no futuro.
