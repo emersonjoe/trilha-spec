@@ -1,0 +1,58 @@
+# A tag v<version> publishes the CLI: four static binaries, their checksums
+# and the roadmap's notes for that version. The tag must equal `version` in
+# cmd/trilha-spec/main.go, or the first step refuses (RM-002).
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # gh release create
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.25"
+      - name: The tag must match cmd/trilha-spec/main.go
+        run: go test ./cmd/trilha-spec -run 'TestVersionMatchesReleaseTag|TestVersionIsSemver' -v
+      - name: Test
+        run: make test
+      - name: Build
+        run: |
+          set -eu
+          version="${RELEASE_TAG#v}"
+          mkdir -p dist
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            GOOS="${target%/*}" GOARCH="${target#*/}" CGO_ENABLED=0 \
+              go build -trimpath -ldflags "-s -w -X main.version=${version}" \
+              -o "dist/trilha-spec_${version}_${target%/*}_${target#*/}" ./cmd/trilha-spec
+          done
+          (cd dist && sha256sum trilha-spec_* > sha256sums.txt && cat sha256sums.txt)
+      - name: Notes from docs/roadmap.md
+        run: |
+          set -eu
+          version="${RELEASE_TAG#v}"
+          minor="${version%.*}"
+          {
+            printf '# trilha-spec %s\n\n' "$RELEASE_TAG"
+            printf 'Install: `go install github.com/emersonjoe/trilha-spec/cmd/trilha-spec@%s`, or download the binary for your platform below and check it against `sha256sums.txt`.\n\n' "$RELEASE_TAG"
+            awk -v h="## Delivered in ${minor}" '
+              $0 == h {on=1; next}
+              on && /^## / {exit}
+              on {print}
+            ' docs/roadmap.md
+            printf '\nFull roadmap: https://github.com/emersonjoe/trilha-spec/blob/%s/docs/roadmap.md\n' "$RELEASE_TAG"
+          } > notes.md
+          cat notes.md
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$RELEASE_TAG" dist/* --title "trilha-spec $RELEASE_TAG" --notes-file notes.md --verify-tag

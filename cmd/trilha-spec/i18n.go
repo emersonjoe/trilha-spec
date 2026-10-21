@@ -80,7 +80,7 @@ func doctorMessage(p spec.Problem) string {
 	return p.String()
 }
 
-const usagePT = `trilha-spec ` + version + ` — o protocolo aberto para trabalho que agentes executam
+var usagePT = `trilha-spec ` + version + ` — o protocolo aberto para trabalho que agentes executam
 
 uso: trilha-spec <comando> [flags]
 

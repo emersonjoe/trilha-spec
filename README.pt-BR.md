@@ -75,8 +75,18 @@ de `review` não fecha até que essa quantidade de pessoas nomeadas assine o que
 
 ## A CLI
 
+Instale com Go, ou baixe um binário estático (Linux e macOS, amd64 e arm64) na
+[página de releases](https://github.com/emersonjoe/trilha-spec/releases/latest) e confira contra o
+`sha256sums.txt` publicado ao lado:
+
 ```bash
 go install github.com/emersonjoe/trilha-spec/cmd/trilha-spec@latest
+
+# ou, sem Go (troque 0.3.0 e darwin_arm64 pela sua versão e plataforma):
+curl -sSLO https://github.com/emersonjoe/trilha-spec/releases/download/v0.3.0/trilha-spec_0.3.0_darwin_arm64
+curl -sSLO https://github.com/emersonjoe/trilha-spec/releases/download/v0.3.0/sha256sums.txt
+shasum -a 256 -c --ignore-missing sha256sums.txt && chmod +x trilha-spec_0.3.0_darwin_arm64 \
+    && mv trilha-spec_0.3.0_darwin_arm64 ~/.local/bin/trilha-spec
 
 trilha-spec init --name meu-app
 trilha-spec spec new "Login OAuth"
