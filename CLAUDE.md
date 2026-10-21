@@ -8,6 +8,7 @@ shell commands, and other important information, read the current plan
 ## Commands
 
 - `make test` — gofmt + `go vet ./...` + `go test ./...` (includes the CLI e2e).
+- `make conformance` — compares the execution contract with the sibling checkouts (`../trilha-runner`, `../trilha-cloud`); absent siblings are skipped.
 - `make build` — `bin/trilha-spec`.
 - `trilha-spec` on this repository itself: `.trilha/` holds the tasks of the current phase
   (`go run ./cmd/trilha-spec task next`).
