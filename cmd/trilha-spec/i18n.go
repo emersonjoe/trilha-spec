@@ -56,6 +56,8 @@ func doctorMessage(p spec.Problem) string {
 		return fmt.Sprintf(T("private key %s is inside .trilha; move it out (only `.pub` files belong in keys/)"), p.Arg)
 	case spec.ProblemSpecNoSecurity:
 		return fmt.Sprintf(T("spec %s is approved but declares no security impact (assets, trust_boundaries, controls, evidence)"), p.Arg)
+	case spec.ProblemSpecTasksDone:
+		return fmt.Sprintf(T("spec %s: all tasks done, status should be done"), p.Arg)
 	case spec.ProblemRequirementDuplicate:
 		return fmt.Sprintf(T("requirement declared by more than one spec: %s"), p.Arg)
 	case spec.ProblemRequirementUnknown:
@@ -195,6 +197,7 @@ var pt = map[string]string{
 	"missing %s (run `trilha-spec init`)":                                                                "falta %s (rode `trilha-spec init`)",
 	"spec reference does not exist: %s":                                                                  "referência a spec inexistente: %s",
 	"spec %s is superseded but no spec names it in `supersedes`":                                         "a spec %s está superseded mas nenhuma spec a cita em `supersedes`",
+	"spec %s: all tasks done, status should be done":                                                     "spec %s: todas as tasks estão done; o status deveria ser done",
 	"requirement declared by more than one spec: %s":                                                     "requisito declarado por mais de uma spec: %s",
 	"task covers a requirement no spec declares: %s":                                                     "a task cobre um requisito que nenhuma spec declara: %s",
 	"requirement no task covers: %s":                                                                     "requisito que nenhuma task cobre: %s",

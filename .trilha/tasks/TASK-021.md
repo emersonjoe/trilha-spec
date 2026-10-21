@@ -11,7 +11,7 @@ acceptance:
   - README EN e pt-BR mostram o caminho por binário e mantêm go install
 checks:
   - make test
-  - RELEASE_TAG=v0.3.0 go test ./cmd/trilha-spec -run TestVersionMatchesReleaseTag
+  - sh -c "RELEASE_TAG=v0.3.0 go test ./cmd/trilha-spec -run TestVersionMatchesReleaseTag"
 created: "2026-10-21T02:10:09Z"
 ---
 

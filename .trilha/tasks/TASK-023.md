@@ -8,7 +8,7 @@ depends_on: []
 acceptance:
   - "spec approved cujas tasks estão todas done gera o aviso 'spec NNN: all tasks done, status should be done' e doctor continua saindo 0"
 checks:
-  - go test ./spec -run TestCheckSpecStatus
+  - go test ./task -run TestCheckSpecStatus
   - make test
 created: "2026-10-21T02:10:09Z"
 ---

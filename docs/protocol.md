@@ -355,7 +355,9 @@ written; `approved` is agreed and tasks may be cut from it; `done` has every tas
 
 Rules a writer enforces: a spec never references itself; every reference exists (`doctor`
 reports one that does not); a `superseded` spec is named in `supersedes` of at least one other
-spec, or `doctor` reports it as an orphan. Task states never move a spec: that is a decision.
+spec, or `doctor` reports it as an orphan. Task states never move a spec: that is a decision —
+but `doctor` warns (`spec-tasks-done`) when an `approved` spec has at least one task and every
+one of them is `done`, so the decision is not forgotten.
 
 ## 12. Project
 

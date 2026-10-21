@@ -19,7 +19,7 @@ evidence:
   - make test
   - make conformance
   - go test ./cmd/trilha-spec -run TestVersionMatchesReleaseTag
-  - go test ./spec -run TestCheckSpecStatus
+  - go test ./task -run TestCheckSpecStatus
 ---
 
 # Fase 0 do roadmap da stack: CI, release por tag e fonte da verdade
@@ -81,7 +81,7 @@ e escolhe a errada. Esta spec fecha a parte do `trilha-spec` da Fase 0 do roadma
 ## Evidência
 
 - `make test` — gofmt completo, vet, testes (inclui `TestVersionMatchesReleaseTag`, que só
-  compara quando `RELEASE_TAG` está definido, e `TestCheckSpecStatus`).
+  compara quando `RELEASE_TAG` está definido, e `TestCheckSpecStatus` em `task/`).
 - `RELEASE_TAG=v0.3.0 go test ./cmd/trilha-spec -run TestVersionMatchesReleaseTag` passa;
   `RELEASE_TAG=v9.9.9` falha.
 - `make conformance` — hoje acusa o fixture do runner (sem `provider`, `tokens_in`,

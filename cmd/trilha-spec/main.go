@@ -1139,6 +1139,9 @@ func cmdDoctor(args []string, out io.Writer) error {
 		for _, p := range task.CheckRequirements(specs, tasks) {
 			add(p)
 		}
+		for _, p := range task.CheckSpecStatus(specs, tasks) {
+			add(p)
+		}
 		if metrics, err := task.CheckMetrics(st.Layout, tasks); err != nil {
 			problems = append(problems, err.Error())
 		} else {
