@@ -1,0 +1,13 @@
+{
+  "task": "TASK-023",
+  "seq": 2,
+  "kind": "check",
+  "at": "2026-10-21T02:18:52Z",
+  "by": "trilha-spec verify",
+  "command": "make test",
+  "dir": "/Users/emersonoliveiradossantos/Projetos/github/trilha-spec",
+  "exit_code": 0,
+  "output": "test -z \"$(gofmt -l .)\"\ngo vet ./...\ngo test ./...\nok  \tgithub.com/emersonjoe/trilha-spec/agent\t(cached)\nok  \tgithub.com/emersonjoe/trilha-spec/ai\t(cached)\nok  \tgithub.com/emersonjoe/trilha-spec/cmd/trilha-spec\t(cached)\nok  \tgithub.com/emersonjoe/trilha-spec/execution\t(cached)\nok  \tgithub.com/emersonjoe/trilha-spec/mcp\t(cached)\nok  \tgithub.com/emersonjoe/trilha-spec/spec\t(cached)\nok  \tgithub.com/emersonjoe/trilha-spec/task\t(cached)\n",
+  "output_sha256": "1642985c1fd233bf32b0176043ba338d5be705de4a4659a56950e9edc1a20cd6",
+  "passed": true
+}

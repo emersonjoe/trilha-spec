@@ -1,14 +1,14 @@
 ---
 id: 015-fase-0-do-roadmap
 title: "Fase 0 do roadmap da stack: CI, release por tag e fonte da verdade"
-status: approved
+status: done
 assets:
   - workflows de CI e release (.github/workflows)
   - binários publicados em releases do GitHub e seus checksums
   - .trilha/ como fonte da verdade de specs e tasks
   - fixtures do contrato de execução comparados com os repositórios irmãos
 trust_boundaries:
-  - GitHub Actions → GitHub Releases (GITHUB_TOKEN com contents:write só no release)
+  - "GitHub Actions → GitHub Releases (GITHUB_TOKEN com contents:write só no release)"
   - trilha-spec → checkout de trilha-runner (leitura de fixture, nunca escrita)
   - usuário → binário baixado (verificado por sha256sums.txt)
 controls:

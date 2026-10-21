@@ -1,0 +1,13 @@
+{
+  "task": "TASK-023",
+  "seq": 1,
+  "kind": "check",
+  "at": "2026-10-21T02:18:52Z",
+  "by": "trilha-spec verify",
+  "command": "go test ./task -run TestCheckSpecStatus",
+  "dir": "/Users/emersonoliveiradossantos/Projetos/github/trilha-spec",
+  "exit_code": 0,
+  "output": "ok  \tgithub.com/emersonjoe/trilha-spec/task\t0.189s\n",
+  "output_sha256": "0181b3ff8652d4d2e2ad13b364a539b8dceb8804df8ee2e15386a7678e8ed0b2",
+  "passed": true
+}

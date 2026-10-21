@@ -1,0 +1,10 @@
+{
+  "task": "TASK-021",
+  "seq": 5,
+  "kind": "note",
+  "at": "2026-10-21T02:18:53Z",
+  "by": "cli",
+  "exit_code": 0,
+  "passed": true,
+  "note": "release.yml on v* tags: TestVersionMatchesReleaseTag gate (RELEASE_TAG), four static binaries with -trimpath -ldflags '-s -w -X main.version=<tag>', sha256sums.txt, gh release create with notes from docs/roadmap.md. version is a var; ldflags override proven locally (trilha-spec 7.7.7). READMEs EN/pt-BR show the binary path. Commit fd4e4df. Tag v0.3.0 not created: human follow-up."
+}

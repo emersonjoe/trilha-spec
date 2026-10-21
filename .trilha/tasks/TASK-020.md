@@ -1,7 +1,7 @@
 ---
 id: TASK-020
 title: "RM-007: gofmt completo no CI e job conformance contra o runner"
-status: ready
+status: done
 spec: 015-fase-0-do-roadmap
 agent: coder
 depends_on: []
@@ -11,6 +11,7 @@ acceptance:
 checks:
   - make test
 created: "2026-10-21T02:10:09Z"
+updated: "2026-10-21T02:19:28Z"
 ---
 
 Roadmap RM-007 e a parte do trilha-spec de RM-003 (trilha-cloud/docs/ROADMAP-STACK.md). O trilha-cloud é privado e fica fora do job de CI; roda em make conformance local.

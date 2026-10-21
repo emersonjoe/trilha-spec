@@ -1,0 +1,13 @@
+{
+  "task": "TASK-021",
+  "seq": 2,
+  "kind": "check",
+  "at": "2026-10-21T02:18:49Z",
+  "by": "trilha-spec verify",
+  "command": "sh -c \"RELEASE_TAG=v0.3.0 go test ./cmd/trilha-spec -run TestVersionMatchesReleaseTag\"",
+  "dir": "/Users/emersonoliveiradossantos/Projetos/github/trilha-spec",
+  "exit_code": 0,
+  "output": "ok  \tgithub.com/emersonjoe/trilha-spec/cmd/trilha-spec\t1.861s\n",
+  "output_sha256": "c4011de39041a461c0a1b41b7642a23ff8cfa824a9acfaead38d472b7c52a790",
+  "passed": true
+}
