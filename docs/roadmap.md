@@ -26,6 +26,21 @@ and the `spec-tasks-done` doctor warning) is `.trilha/specs/015-fase-0-do-roadma
 
 ## Delivered in 0.3
 
+### 0.3.1 — 2026-10-25
+
+The first release with binaries (linux and macOS, amd64 and arm64, with `sha256sums.txt`); the
+protocol is still 0.3, no field or transition changed.
+
+- **Failure taxonomy** (spec 014, #15): §10 documents a recommended vocabulary for
+  `failure_class` and `error_code` (`environment_missing_tool`, `test_failure`, `lint_failure`,
+  `timeout`, `provider_transient`, `agent_error`), not yet a closed enum.
+- **`doctor` warns `spec-tasks-done`** when an `approved` spec has every task `done` (spec 015).
+- **One source of truth** (ADR 003): `.trilha/` is authoritative in trilha-spec, trilha-runner
+  and trilha-cloud; Spec Kit folders are frozen history.
+- **CI** formats the whole module and checks the execution contract against trilha-runner.
+
+### 0.3.0
+
 These came from planning a public-sector delivery programme that spans four repositories — the
 product app, the framework, the runner and the control plane — and has to be auditable by the
 buyer at every milestone. Each one is a spec under `specs/` and

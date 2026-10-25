@@ -30,7 +30,7 @@ import (
 // version is the release this binary says it is. A release build overrides it
 // with the tag: -ldflags "-X main.version=0.3.0" (.github/workflows/release.yml),
 // and TestVersionMatchesReleaseTag refuses a tag that disagrees with it.
-var version = "0.3.0"
+var version = "0.3.1"
 
 var usage = `trilha-spec ` + version + ` — the open protocol for work agents can execute
 

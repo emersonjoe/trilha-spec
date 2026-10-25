@@ -26,6 +26,21 @@ runner, releases com binários em tags `v*`, adr/003 sobre a fonte única da ver
 
 ## Entregue na 0.3
 
+### 0.3.1 — 2026-10-25
+
+A primeira release com binários (linux e macOS, amd64 e arm64, com `sha256sums.txt`); o
+protocolo continua 0.3, nenhum campo ou transição mudou.
+
+- **Taxonomia de falhas** (spec 014, #15): o §10 documenta um vocabulário recomendado para
+  `failure_class` e `error_code` (`environment_missing_tool`, `test_failure`, `lint_failure`,
+  `timeout`, `provider_transient`, `agent_error`), ainda não um enum fechado.
+- **`doctor` avisa `spec-tasks-done`** quando uma spec `approved` tem todas as tasks `done` (spec 015).
+- **Uma fonte da verdade** (ADR 003): `.trilha/` é autoritativo no trilha-spec, no trilha-runner
+  e no trilha-cloud; as pastas do Spec Kit são histórico congelado.
+- **CI** formata o módulo inteiro e confere o contrato de execução contra o trilha-runner.
+
+### 0.3.0
+
 Vieram do planejamento de um programa de setor público que atravessa quatro repositórios — o
 app do produto, o framework, o runner e o control plane — e precisa ser auditável pelo
 comprador em todo marco. Cada um é uma spec em `specs/`
