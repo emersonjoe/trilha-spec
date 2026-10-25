@@ -195,6 +195,8 @@ func (p Problem) String() string {
 		return "spec " + p.Arg + " is superseded but no spec names it in `supersedes`"
 	case ProblemSpecNoSecurity:
 		return "spec " + p.Arg + " is approved but declares no security impact (assets, trust_boundaries, controls, evidence)"
+	case ProblemSpecTasksDone:
+		return "spec " + p.Arg + ": all tasks done, status should be done"
 	case ProblemRequirementDuplicate:
 		return "requirement declared by more than one spec: " + p.Arg
 	case ProblemRequirementUnknown:

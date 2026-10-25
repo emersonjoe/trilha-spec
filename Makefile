@@ -4,11 +4,11 @@ test: vet
 	go test ./...
 
 vet:
-	test -z "$$(gofmt -l spec task agent ai execution mcp cmd)"
+	test -z "$$(gofmt -l .)"
 	go vet ./...
 
 fmt:
-	gofmt -w spec task agent ai execution mcp cmd
+	gofmt -w .
 
 conformance:
 	./scripts/check-execution-contract.sh

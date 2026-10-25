@@ -294,6 +294,22 @@ func TestSpecSecurityCLI(t *testing.T) {
 	if out := must(t, dir, "doctor"); strings.Contains(out, "warning") {
 		t.Fatalf("doctor still warns:\n%s", out)
 	}
+	// Every task of an approved spec done: the spec should be done too. A
+	// warning in both languages, never a failure; `spec move` clears it.
+	must(t, dir, "task", "add", "Ship", "--spec", "002-bare", "--status", "ready", "--accept", "ok")
+	for _, to := range []string{"running", "verify", "review", "done"} {
+		must(t, dir, "task", "move", "TASK-002", to)
+	}
+	if out := must(t, dir, "doctor"); !strings.Contains(out, "! spec 002-bare: all tasks done, status should be done") || !strings.Contains(out, "1 warning(s)") || !strings.Contains(out, "is healthy") {
+		t.Fatalf("doctor:\n%s", out)
+	}
+	if out, err := cliEnv(t, dir, []string{"TRILHA_LANG=pt"}, "doctor"); err != nil || !strings.Contains(out, "spec 002-bare: todas as tasks estão done; o status deveria ser done") {
+		t.Fatalf("doctor pt: %v\n%s", err, out)
+	}
+	must(t, dir, "spec", "move", "002-bare", "done")
+	if out := must(t, dir, "doctor"); strings.Contains(out, "warning") {
+		t.Fatalf("doctor still warns:\n%s", out)
+	}
 }
 
 func TestProjectLimitsAndPauseCLI(t *testing.T) {

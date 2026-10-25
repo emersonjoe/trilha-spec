@@ -77,8 +77,18 @@ and the reviewer decides from the evidence, not from a chat log. A task that dec
 
 ## The CLI
 
+Install with Go, or download a static binary (Linux and macOS, amd64 and arm64) from the
+[releases page](https://github.com/emersonjoe/trilha-spec/releases/latest) and check it against
+the `sha256sums.txt` published next to it:
+
 ```bash
 go install github.com/emersonjoe/trilha-spec/cmd/trilha-spec@latest
+
+# or, without Go (replace 0.3.0 and darwin_arm64 with your version and platform):
+curl -sSLO https://github.com/emersonjoe/trilha-spec/releases/download/v0.3.0/trilha-spec_0.3.0_darwin_arm64
+curl -sSLO https://github.com/emersonjoe/trilha-spec/releases/download/v0.3.0/sha256sums.txt
+shasum -a 256 -c --ignore-missing sha256sums.txt && chmod +x trilha-spec_0.3.0_darwin_arm64 \
+    && mv trilha-spec_0.3.0_darwin_arm64 ~/.local/bin/trilha-spec
 
 trilha-spec init --name my-app                 # .trilha/ with project, constitution, agents
 trilha-spec spec new "OAuth login"             # specs/001-oauth-login.md

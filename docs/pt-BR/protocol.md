@@ -380,7 +380,8 @@ foi julgada e recusada; `superseded` foi substituída por uma spec que a cita em
 Regras que um escritor faz valer: uma spec nunca referencia a si mesma; toda referência existe
 (`doctor` aponta a que não existe); uma spec `superseded` é citada em `supersedes` de pelo menos
 uma outra spec, ou `doctor` a aponta como órfã. Estado de task nunca move uma spec: isso é uma
-decisão.
+decisão — mas `doctor` avisa (`spec-tasks-done`) quando uma spec `approved` tem pelo menos uma
+task e todas estão `done`, para que a decisão não seja esquecida.
 
 ## 12. Projeto
 

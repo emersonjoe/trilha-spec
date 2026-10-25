@@ -1,0 +1,10 @@
+{
+  "task": "TASK-022",
+  "seq": 4,
+  "kind": "note",
+  "at": "2026-10-21T02:18:53Z",
+  "by": "cli",
+  "exit_code": 0,
+  "passed": true,
+  "note": "docs/adr/003-fonte-da-verdade.md; CLAUDE.md without the SPECKIT block; docs/agents/issue-tracker.md cites the ADR; roadmap EN/pt-BR 'Known conflict' -> 'Resolved' (trilha 0.124.0 moved the cache to .trilha/cache/) and 'Open' lists TASK-024..028 (RM-050, 052, 053, 054, 055); adr/001 notes protocol 0.3 as of 2026-10-20. specs/NNN/ folders kept as frozen history. Commit 7b02d61."
+}

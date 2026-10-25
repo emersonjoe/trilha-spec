@@ -4,13 +4,25 @@
 
 What the protocol does not have yet, found by using it. Each item is an `idea` task in this
 repository's own `.trilha/tasks/` (`trilha-spec task list --status idea`); it becomes a spec
-under `specs/` when it is picked up, and the protocol version bumps when a field or a
+under `.trilha/specs/` when it is picked up (adr/003), and the protocol version bumps when a field or a
 transition changes (§9 of the protocol).
 
 ## Open
 
-Nothing at the moment: `trilha-spec task list --status idea` is empty. The next gaps will
-come from the runner, the control plane and the programmes using protocol 0.3.
+Each one is an `idea` task here (`trilha-spec task list --status idea`) and an item of the
+stack roadmap (`trilha-cloud/docs/ROADMAP-STACK.md`, phase 4). None is started.
+
+| Task | Roadmap | Gap |
+|---|---|---|
+| TASK-024 | RM-050 | `failure_class` is a recommended vocabulary (spec 014), not an enum; make it one in `execution/contract.go` and the schema, validate it in `doctor`, bump to 0.4. |
+| TASK-025 | RM-052 | The MCP write surface stops at `trilha_evidence` (`note`/`artifact`) and an unsigned `trilha_attest`; add `run`/`eval`, `--sign-key`, `trilha_task_add`. |
+| TASK-026 | RM-053 | The execution contract has `cancelled` and `preview`; the task life cycle (§4) has no `cancelled` and Preview lives only in `CONTEXT.md`. |
+| TASK-027 | RM-054 | `task.Resolver` has no remote implementation; the runner resolves on its own. One resolution path, tested against the interface. |
+| TASK-028 | RM-055 | The path to 1.0: JSON Schema for every front matter, `doctor --schema`, a compatibility section and a public conformance command. |
+
+Phase 0 of the same roadmap (spec 015: CI formatting the whole module, a `conformance` job
+against the runner, releases with binaries on `v*` tags, adr/003 on the single source of truth
+and the `spec-tasks-done` doctor warning) is `.trilha/specs/015-fase-0-do-roadmap.md`.
 
 ## Delivered in 0.3
 
@@ -48,8 +60,10 @@ task with evidence.
 | TASK-007 · spec 002 · [#6](https://github.com/emersonjoe/trilha-spec/issues/6) | CLI messages in pt-BR via `TRILHA_LANG`. |
 | TASK-008 · spec 008 · [#7](https://github.com/emersonjoe/trilha-spec/issues/7) | Signed evidence records, for a remote runner whose evidence crosses a trust boundary. |
 
-## Known conflict
+## Resolved
 
-The `trilha` framework's dev server writes `*` in `.trilha/.gitignore`, hiding the protocol
-from git; `trilha-spec doctor` reports it and `init` rewrites the file. The lasting fix is the
-framework change recorded in [adr/001](adr/001-tres-repositorios.md).
+The `trilha` framework's dev server used to write `*` in `.trilha/.gitignore`, hiding the
+protocol from git. `trilha` 0.124.0 (2026-09-12) moved its build cache to `.trilha/cache/`,
+and the scaffold's `.gitignore` now ignores only `.trilha/cache/` and `.trilha/runs/`, as
+[adr/001](adr/001-tres-repositorios.md) asked. `trilha-spec doctor` still reports a
+`.gitignore` with `*` and `init` still rewrites it, for projects created before that release.

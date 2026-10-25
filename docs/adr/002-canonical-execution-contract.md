@@ -21,3 +21,4 @@ A Task is work, a Run is one logical execution of that work, and an Attempt is o
 - Released modules remain reproducible and do not depend on local filesystem layout.
 - Contract changes require a new versioned directory and fixture.
 - Cross-repository development must run the conformance gate before release.
+- The gate runs in CI in all three repositories: `trilha-spec` checks out `trilha-runner` (`ref: main`) and compares (job `conformance` in `.github/workflows/ci.yml`); the runner and the cloud do the same against this repository. `trilha-cloud` is private, so this repository compares it only through `make conformance` on a machine with both checkouts. A sibling that is not checked out is reported as skipped, a sibling that differs fails the gate.

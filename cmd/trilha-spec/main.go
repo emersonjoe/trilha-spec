@@ -27,9 +27,12 @@ import (
 	"github.com/emersonjoe/trilha-spec/task"
 )
 
-const version = "0.3.0"
+// version is the release this binary says it is. A release build overrides it
+// with the tag: -ldflags "-X main.version=0.3.0" (.github/workflows/release.yml),
+// and TestVersionMatchesReleaseTag refuses a tag that disagrees with it.
+var version = "0.3.0"
 
-const usage = `trilha-spec ` + version + ` — the open protocol for work agents can execute
+var usage = `trilha-spec ` + version + ` — the open protocol for work agents can execute
 
 usage: trilha-spec <command> [flags]
 
@@ -1134,6 +1137,9 @@ func cmdDoctor(args []string, out io.Writer) error {
 	// the tasks that claim to cover them.
 	if tasksErr == nil && specsErr == nil {
 		for _, p := range task.CheckRequirements(specs, tasks) {
+			add(p)
+		}
+		for _, p := range task.CheckSpecStatus(specs, tasks) {
 			add(p)
 		}
 		if metrics, err := task.CheckMetrics(st.Layout, tasks); err != nil {

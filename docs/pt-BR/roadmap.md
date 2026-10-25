@@ -4,13 +4,25 @@
 
 O que o protocolo ainda não tem, descoberto ao usá-lo. Cada item é uma task `idea` no
 `.trilha/tasks/` deste repositório (`trilha-spec task list --status idea`); vira uma spec em
-`specs/` quando for puxado, e a versão do protocolo sobe quando um campo ou uma transição
+`.trilha/specs/` quando for puxado (adr/003), e a versão do protocolo sobe quando um campo ou uma transição
 muda (§9 do protocolo).
 
 ## Em aberto
 
-Nada no momento: `trilha-spec task list --status idea` está vazio. As próximas lacunas virão
-do runner, do control plane e dos programas usando o protocolo 0.3.
+Cada item é uma task `idea` aqui (`trilha-spec task list --status idea`) e um item do roadmap
+da stack (`trilha-cloud/docs/ROADMAP-STACK.md`, fase 4). Nenhum começou.
+
+| Task | Roadmap | Lacuna |
+|---|---|---|
+| TASK-024 | RM-050 | `failure_class` é vocabulário recomendado (spec 014), não enum; virar enum em `execution/contract.go` e no schema, validar no `doctor`, subir para 0.4. |
+| TASK-025 | RM-052 | A superfície de escrita do MCP para em `trilha_evidence` (`note`/`artifact`) e num `trilha_attest` sem assinatura; acrescentar `run`/`eval`, `--sign-key`, `trilha_task_add`. |
+| TASK-026 | RM-053 | O contrato de execução tem `cancelled` e `preview`; o ciclo de vida da task (§4) não tem `cancelled` e Preview só existe no `CONTEXT.md`. |
+| TASK-027 | RM-054 | `task.Resolver` não tem implementação remota; o runner resolve por conta própria. Um só caminho de resolução, testado contra a interface. |
+| TASK-028 | RM-055 | O caminho até a 1.0: JSON Schema de todo front matter, `doctor --schema`, seção de compatibilidade e um comando público de conformidade. |
+
+A fase 0 do mesmo roadmap (spec 015: CI formatando o módulo inteiro, job `conformance` contra o
+runner, releases com binários em tags `v*`, adr/003 sobre a fonte única da verdade e o aviso
+`spec-tasks-done` do doctor) é `.trilha/specs/015-fase-0-do-roadmap.md`.
 
 ## Entregue na 0.3
 
@@ -48,8 +60,10 @@ com evidência.
 | TASK-007 · spec 002 · [#6](https://github.com/emersonjoe/trilha-spec/issues/6) | Mensagens da CLI em pt-BR via `TRILHA_LANG`. |
 | TASK-008 · spec 008 · [#7](https://github.com/emersonjoe/trilha-spec/issues/7) | Evidência assinada, para um runner remoto cuja evidência cruza uma fronteira de confiança. |
 
-## Conflito conhecido
+## Resolvido
 
-O dev server do framework `trilha` escreve `*` em `.trilha/.gitignore`, escondendo o protocolo
-do git; `trilha-spec doctor` acusa e `init` reescreve o arquivo. A correção definitiva é a
-mudança no framework registrada no [adr/001](../adr/001-tres-repositorios.md).
+O dev server do framework `trilha` escrevia `*` em `.trilha/.gitignore`, escondendo o protocolo
+do git. O `trilha` 0.124.0 (2026-09-12) moveu o cache de build para `.trilha/cache/`, e o
+`.gitignore` do scaffold passou a ignorar só `.trilha/cache/` e `.trilha/runs/`, como a
+[adr/001](../adr/001-tres-repositorios.md) pedia. `trilha-spec doctor` continua acusando um
+`.gitignore` com `*` e `init` continua reescrevendo-o, para projetos criados antes dessa versão.

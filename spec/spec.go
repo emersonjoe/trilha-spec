@@ -237,10 +237,15 @@ const (
 	// ProblemSpecNoSecurity: an approved spec with no assets, trust
 	// boundaries, controls or evidence. A warning: the spec is still valid.
 	ProblemSpecNoSecurity = "spec-no-security"
+	// ProblemSpecTasksDone: an approved spec whose every task is done; it
+	// should be done too. A warning: closing a spec is a human decision.
+	// Arg is the spec id. Reported by task.CheckSpecStatus, which sees both
+	// sides.
+	ProblemSpecTasksDone = "spec-tasks-done"
 )
 
 // warnings are the problem codes doctor reports without failing.
-var warnings = map[string]bool{ProblemSpecNoSecurity: true, ProblemRequirementUncovered: true, ProblemMilestoneEmpty: true, ProblemMilestonePastDue: true, ProblemMetricNotEvidenced: true}
+var warnings = map[string]bool{ProblemSpecNoSecurity: true, ProblemSpecTasksDone: true, ProblemRequirementUncovered: true, ProblemMilestoneEmpty: true, ProblemMilestonePastDue: true, ProblemMetricNotEvidenced: true}
 
 // Warning answers whether the problem is advice rather than a fault.
 func (p Problem) Warning() bool { return warnings[p.Code] }
