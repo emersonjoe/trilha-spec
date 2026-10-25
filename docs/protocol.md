@@ -1,4 +1,4 @@
-# The Trilha protocol, version 0.3
+# The Trilha protocol, version 0.4
 
 > 🇺🇸 English · [🇧🇷 Português](pt-BR/protocol.md)
 
@@ -271,8 +271,18 @@ Write tools are only listed with `--write`; a tool not listed cannot be called.
 
 ## 9. Versioning
 
-This page is version 0.3. A change to a field, a transition or a file name bumps it and is
+This page is version 0.4. A change to a field, a transition or a file name bumps it and is
 recorded in a spec under `specs/`.
+
+0.4 (spec 016) lets the agent and the people around it talk: what the agent is doing
+(`agent_state`), a badge that says someone is needed (`attention`), a run that stops to ask
+(status `needs_input`, phase `awaiting_input`, `result.question`) and the answer that continues
+it (`continuation`, with the agent `session` to resume), task memory between runs (`overview`,
+`notes`, `context`), counts of what changed (`diff_stats`), review and hunt runs (`kind`,
+`review_of`, `review_mode`, `hunt_seed`) with anchored `findings`, human `review_comments` and
+the agent's `review_replies`, variant groups, and report `artifacts`. Every addition is optional
+inside `trilha.execution/v1`. The one breaking change is the status `needs_input`: a reader that
+closes the status enum must learn it.
 
 0.3 (specs 009–013) came from planning a public-sector programme across four repositories. It
 added requirement traceability (`requirements` on a spec, `covers` on a task), milestones with
@@ -317,6 +327,39 @@ without parsing `message` or `error_code`:
 `error_code` stays a free string next to it — the provider- or tool-specific detail (an SDK
 error name, an exit code, a lint rule ID) that `failure_class` deliberately does not carry so
 the category stays stable across providers and tool versions.
+
+### Agent conversation (0.4)
+
+A runner translates each agent's hooks into one generic event set (`session_start`,
+`prompt_submit`, `tool_start`, `tool_end`, `permission_request`, `asked`, `stop`, `stop_failure`,
+`session_end`) and one state machine, `execution.NextAgentState`, into `agent_state`: `working`,
+`idle`, `waiting_permission`, `asked`, `stopped_error`. Progress reports carry the state when it
+changes, and may raise or clear `attention` (at most 5 reasons of 500 bytes, newest last).
+
+An agent that lacks information asks and stops. The run ends with status `needs_input`, phase
+`awaiting_input` and `result.question` (≤2000 bytes). It is not a failure and consumes no failed
+attempt. A control plane answers by queueing a new run with `retry_of` and `continuation`
+(`answer` ≤8000 bytes, the `question`, and the `session` the result reported); a runner with the
+same driver resumes that session, otherwise it hands question and answer to a fresh one.
+
+### Task memory, findings and artifacts (0.4)
+
+A result may carry an `overview` (≤500 bytes) and `notes` (≤1200 bytes each, at most 50). A
+control plane hands the next run its `context`; a runner renders it with
+`execution.QuoteContext`: the newest 5 notes, ≤6000 bytes, every line quoted and the block
+labelled as information, never as instructions.
+
+`diff_stats` holds counts only. A `review` run (`review_mode` `report` must leave the branch
+untouched; `fix` may commit) returns `review.verdict` (`pass` or `changes`) and `findings`; a
+`hunt` run, seeded by `hunt_seed` toward one area and one style, returns `findings`. A finding is
+`{severity: critical|high|medium, path, line_start, line_end, title, why, repro}` with a path
+relative to the repository and no code. `review_comments` are a person's words and an anchor;
+the runner reads the lines itself and answers with `review_replies`.
+
+`artifacts` describe reports for people (`text/html`, `text/markdown`, `image/png`,
+`image/jpeg`, ≤2 MiB each, at most 5) by name, type, size and SHA-256. A control plane accepts
+the bytes only when the project allows artifacts, and serves them from an opaque origin.
+`execution/testdata/run-v1-needs-input.json` is the canonical fixture for these fields.
 
 ## 11. Specification
 

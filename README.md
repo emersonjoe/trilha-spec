@@ -84,11 +84,11 @@ the `sha256sums.txt` published next to it:
 ```bash
 go install github.com/emersonjoe/trilha-spec/cmd/trilha-spec@latest
 
-# or, without Go (replace 0.3.1 and darwin_arm64 with your version and platform):
-curl -sSLO https://github.com/emersonjoe/trilha-spec/releases/download/v0.3.1/trilha-spec_0.3.1_darwin_arm64
-curl -sSLO https://github.com/emersonjoe/trilha-spec/releases/download/v0.3.1/sha256sums.txt
-shasum -a 256 -c --ignore-missing sha256sums.txt && chmod +x trilha-spec_0.3.1_darwin_arm64 \
-    && mv trilha-spec_0.3.1_darwin_arm64 ~/.local/bin/trilha-spec
+# or, without Go (replace 0.4.0 and darwin_arm64 with your version and platform):
+curl -sSLO https://github.com/emersonjoe/trilha-spec/releases/download/v0.4.0/trilha-spec_0.4.0_darwin_arm64
+curl -sSLO https://github.com/emersonjoe/trilha-spec/releases/download/v0.4.0/sha256sums.txt
+shasum -a 256 -c --ignore-missing sha256sums.txt && chmod +x trilha-spec_0.4.0_darwin_arm64 \
+    && mv trilha-spec_0.4.0_darwin_arm64 ~/.local/bin/trilha-spec
 
 trilha-spec init --name my-app                 # .trilha/ with project, constitution, agents
 trilha-spec spec new "OAuth login"             # specs/001-oauth-login.md

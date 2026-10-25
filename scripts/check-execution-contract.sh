@@ -7,6 +7,7 @@ set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 FIXTURE="$ROOT/execution/testdata/run-v1.json"
+NEEDS_INPUT="$ROOT/execution/testdata/run-v1-needs-input.json"
 SCHEMA="$ROOT/contracts/execution/v1/schema.json"
 
 compared=0
@@ -17,6 +18,7 @@ for repo in trilha-runner trilha-cloud; do
     continue
   fi
   cmp "$FIXTURE" "$target/testdata/contracts/execution-v1.json"
+  cmp "$NEEDS_INPUT" "$target/testdata/contracts/execution-v1-needs-input.json"
   cmp "$SCHEMA" "$target/testdata/contracts/execution-v1.schema.json"
   printf '%s execution contract matches v1\n' "$repo"
   compared=$((compared + 1))

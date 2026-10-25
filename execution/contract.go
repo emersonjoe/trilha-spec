@@ -23,7 +23,7 @@ const (
 	Cancelled Status = "cancelled"
 )
 
-var Statuses = []Status{Queued, Running, Review, Failed, Done, Cancelled}
+var Statuses = []Status{Queued, Running, Review, Failed, Done, Cancelled, NeedsInput}
 
 func (s Status) Valid() bool {
 	for _, candidate := range Statuses {
@@ -55,7 +55,7 @@ const (
 var Phases = []Phase{
 	PhaseQueued, PhasePreparingContext, PhaseCreatingWorktree, PhaseConsultingAI,
 	PhaseChangingFiles, PhaseRunningChecks, PhaseCreatingPreview, PhaseAwaitingReview,
-	PhaseRetryWait, PhaseCancelling, PhaseCancelled, PhaseFailed, PhaseDone,
+	PhaseRetryWait, PhaseCancelling, PhaseCancelled, PhaseFailed, PhaseDone, PhaseAwaitingInput,
 }
 
 func (p Phase) Valid() bool {
@@ -137,6 +137,16 @@ type Outcome struct {
 	FilesChanged     []string   `json:"files_changed,omitempty"`
 	DiffSummary      string     `json:"diff_summary,omitempty"`
 	AgentReport      string     `json:"agent_report,omitempty"`
+	// Protocol 0.4 (spec 016).
+	Question      *Question      `json:"question,omitempty"`
+	Session       *Session       `json:"session,omitempty"`
+	Overview      string         `json:"overview,omitempty"`
+	Notes         []Note         `json:"notes,omitempty"`
+	DiffStats     *DiffStats     `json:"diff_stats,omitempty"`
+	Review        *ReviewVerdict `json:"review,omitempty"`
+	Findings      []Finding      `json:"findings,omitempty"`
+	ReviewReplies []ReviewReply  `json:"review_replies,omitempty"`
+	Artifacts     []Artifact     `json:"artifacts,omitempty"`
 }
 
 type Run struct {
@@ -159,6 +169,18 @@ type Run struct {
 	Events          []Event   `json:"events,omitempty"`
 	Attempts        []Attempt `json:"attempts,omitempty"`
 	Result          *Outcome  `json:"result,omitempty"`
+	// Protocol 0.4 (spec 016).
+	Kind           Kind            `json:"kind,omitempty"`
+	ReviewOf       string          `json:"review_of,omitempty"`
+	ReviewMode     ReviewMode      `json:"review_mode,omitempty"`
+	HuntSeed       *HuntSeed       `json:"hunt_seed,omitempty"`
+	VariantGroup   string          `json:"variant_group,omitempty"`
+	VariantIndex   int             `json:"variant_index,omitempty"`
+	AgentState     AgentState      `json:"agent_state,omitempty"`
+	Attention      []string        `json:"attention,omitempty"`
+	Continuation   *Continuation   `json:"continuation,omitempty"`
+	Context        *TaskContext    `json:"context,omitempty"`
+	ReviewComments []ReviewComment `json:"review_comments,omitempty"`
 }
 
 var runIDPattern = regexp.MustCompile(`^run-[0-9]{6,}$`)
@@ -192,6 +214,7 @@ func (r Run) Validate() error {
 	if r.RetryOf != "" && !ValidRunID(r.RetryOf) {
 		problems = append(problems, "retry_of must be a run id")
 	}
+	problems = append(problems, r.validate04()...)
 	if len(problems) > 0 {
 		return errors.New("execution " + r.ID + ": " + strings.Join(problems, "; "))
 	}

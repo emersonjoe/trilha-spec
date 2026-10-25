@@ -24,6 +24,17 @@ Phase 0 of the same roadmap (spec 015: CI formatting the whole module, a `confor
 against the runner, releases with binaries on `v*` tags, adr/003 on the single source of truth
 and the `spec-tasks-done` doctor warning) is `.trilha/specs/015-fase-0-do-roadmap.md`.
 
+## Delivered in 0.4
+
+### 0.4.0 — protocol 0.4 (spec 016)
+
+What the trilha-cloud plan drawn from dev-3.0 needed on the wire (`trilha-cloud/docs/PLANO-DEV3.md`,
+item DV-00): agent state from hooks, an attention badge, a run that stops to ask (`needs_input`)
+and the answer that resumes its session, task memory between runs (overview and quoted notes),
+diff counts, review and hunt runs with anchored findings and no code, human review comments and
+the agent's replies, variant groups and report artifacts. One breaking change: the status
+`needs_input`.
+
 ## Delivered in 0.3
 
 ### 0.3.1 — 2026-10-25

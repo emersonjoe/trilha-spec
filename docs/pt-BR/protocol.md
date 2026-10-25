@@ -1,4 +1,4 @@
-# O protocolo Trilha, versão 0.3
+# O protocolo Trilha, versão 0.4
 
 > [🇺🇸 English](../protocol.md) · 🇧🇷 Português
 
@@ -274,8 +274,18 @@ Ferramentas de escrita só aparecem com `--write`; ferramenta não listada não 
 
 ## 9. Versionamento
 
-Esta página é a versão 0.3. Mudança de campo, transição ou nome de arquivo sobe a versão e é
+Esta página é a versão 0.4. Mudança de campo, transição ou nome de arquivo sobe a versão e é
 registrada em uma spec em `specs/`.
+
+A 0.4 (spec 016) deixa o agente e as pessoas ao redor conversarem: o que o agente está fazendo
+(`agent_state`), um selo que diz que alguém é necessário (`attention`), um run que para para
+perguntar (status `needs_input`, fase `awaiting_input`, `result.question`) e a resposta que o
+continua (`continuation`, com a `session` do agente para retomar), memória da task entre runs
+(`overview`, `notes`, `context`), contagens do que mudou (`diff_stats`), runs de revisão e de
+caça (`kind`, `review_of`, `review_mode`, `hunt_seed`) com `findings` ancorados, `review_comments`
+humanos e as `review_replies` do agente, grupos de variantes e `artifacts` de relatório. Toda
+adição é opcional dentro de `trilha.execution/v1`. A única mudança que quebra é o status
+`needs_input`: um leitor que fecha o enum de status precisa conhecê-lo.
 
 A 0.3 (specs 009–013) saiu do planejamento de um programa de setor público em quatro
 repositórios. Acrescentou rastreabilidade de requisitos (`requirements` na spec, `covers` na
@@ -321,6 +331,40 @@ contar falhas sem parsear `message` ou `error_code`:
 da ferramenta (um nome de erro de SDK, um exit code, um ID de regra de lint) que `failure_class`
 deliberadamente não carrega, para que a categoria permaneça estável entre provedores e versões
 de ferramenta.
+
+### Conversa com o agente (0.4)
+
+Um runner traduz os hooks de cada agente num conjunto genérico de eventos (`session_start`,
+`prompt_submit`, `tool_start`, `tool_end`, `permission_request`, `asked`, `stop`, `stop_failure`,
+`session_end`) e numa única máquina de estados, `execution.NextAgentState`, em `agent_state`:
+`working`, `idle`, `waiting_permission`, `asked`, `stopped_error`. O progresso leva o estado
+quando ele muda e pode levantar ou limpar `attention` (no máximo 5 motivos de 500 bytes, o mais
+novo por último).
+
+Um agente sem informação pergunta e para. O run termina com status `needs_input`, fase
+`awaiting_input` e `result.question` (≤2000 bytes). Não é falha e não consome tentativa falha.
+Um control plane responde enfileirando um run novo com `retry_of` e `continuation` (`answer`
+≤8000 bytes, a `question` e a `session` que o resultado reportou); um runner do mesmo driver
+retoma essa sessão, senão entrega pergunta e resposta a uma sessão nova.
+
+### Memória da task, achados e artefatos (0.4)
+
+Um resultado pode trazer `overview` (≤500 bytes) e `notes` (≤1200 bytes cada, no máximo 50). Um
+control plane entrega ao run seguinte o seu `context`; o runner o monta com
+`execution.QuoteContext`: as 5 notas mais novas, ≤6000 bytes, cada linha citada e o bloco
+rotulado como informação, nunca como instrução.
+
+`diff_stats` guarda só contagens. Um run `review` (`review_mode` `report` deve deixar a branch
+intacta; `fix` pode fazer commit) devolve `review.verdict` (`pass` ou `changes`) e `findings`; um
+run `hunt`, apontado por `hunt_seed` para uma área e um estilo, devolve `findings`. Um achado é
+`{severity: critical|high|medium, path, line_start, line_end, title, why, repro}`, com caminho
+relativo ao repositório e sem código. `review_comments` são as palavras de uma pessoa e uma
+âncora; o runner lê as linhas por conta própria e responde com `review_replies`.
+
+`artifacts` descrevem relatórios para pessoas (`text/html`, `text/markdown`, `image/png`,
+`image/jpeg`, ≤2 MiB cada, no máximo 5) por nome, tipo, tamanho e SHA-256. Um control plane
+aceita os bytes só quando o projeto permite artefatos e os serve de uma origem opaca.
+`execution/testdata/run-v1-needs-input.json` é a fixture canônica desses campos.
 
 ## 11. Especificação
 
