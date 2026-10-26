@@ -24,6 +24,17 @@ A fase 0 do mesmo roadmap (spec 015: CI formatando o módulo inteiro, job `confo
 runner, releases com binários em tags `v*`, adr/003 sobre a fonte única da verdade e o aviso
 `spec-tasks-done` do doctor) é `.trilha/specs/015-fase-0-do-roadmap.md`.
 
+## Entregue na 0.4
+
+### 0.4.0 — protocolo 0.4 (spec 016)
+
+O que o plano do trilha-cloud derivado do dev-3.0 precisava no fio (`trilha-cloud/docs/PLANO-DEV3.md`,
+item DV-00): estado do agente a partir dos hooks, selo de atenção, um run que para para
+perguntar (`needs_input`) e a resposta que retoma a sessão, memória da task entre runs (overview
+e notas citadas), contagens do diff, runs de revisão e de caça com achados ancorados e sem
+código, comentários de revisão humanos e as respostas do agente, grupos de variantes e
+artefatos de relatório. Uma mudança que quebra: o status `needs_input`.
+
 ## Entregue na 0.3
 
 ### 0.3.1 — 2026-10-25
